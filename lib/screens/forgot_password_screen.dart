@@ -5,22 +5,19 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class ForgotPasswordScreen extends StatefulWidget {
+  const ForgotPasswordScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _isRecaptchaVerified = false;
 
   late AnimationController _pulseController;
   late AnimationController _shimmerController;
@@ -72,41 +69,28 @@ class _LoginScreenState extends State<LoginScreen>
     _rotationController.dispose();
     _floatController.dispose();
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() async {
+  void _handleSendOTP() async {
     if (_formKey.currentState!.validate()) {
-      // ตรวจสอบว่ายืนยัน reCAPTCHA แล้วหรือยัง
-      if (!_isRecaptchaVerified) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'กรุณายืนยันตัวตนด้วย reCAPTCHA ก่อน',
-              style: GoogleFonts.kanit(),
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
       setState(() {
         _isLoading = true;
       });
 
+      // จำลองการส่งอีเมล
       await Future.delayed(const Duration(seconds: 2));
+
       setState(() {
         _isLoading = false;
       });
-    }
-  }
 
-  void _togglePasswordVisibility() {
-    setState(() {
-      _obscurePassword = !_obscurePassword;
-    });
+      // Navigate to OTP verification screen
+      Get.toNamed('/confirm-otp', arguments: {
+        'email': _emailController.text,
+        'type': 'forgot-password',
+      });
+    }
   }
 
   @override
@@ -132,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen>
               children: [
                 _buildLogoSection(),
                 const SizedBox(height: 10),
-                _buildLoginCard(),
+                _buildForgotPasswordCard(),
               ],
             ),
           ),
@@ -141,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginCard() {
+  Widget _buildForgotPasswordCard() {
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
@@ -176,6 +160,8 @@ class _LoginScreenState extends State<LoginScreen>
         key: _formKey,
         child: Column(
           children: [
+
+            // Title
             ShaderMask(
               shaderCallback: (bounds) {
                 return LinearGradient(
@@ -184,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ).createShader(bounds);
               },
               child: Text(
-                'เข้าสู่ระบบ',
+                'ลืมรหัสผ่าน',
                 style: GoogleFonts.kanit(
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
@@ -195,7 +181,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              'เข้าสู่ระบบเพื่อใช้บริการวิเคราะห์มัลแวร์',
+              'กรอกอีเมลเพื่อรับรหัส OTP รีเซ็ตรหัสผ่าน',
               style: GoogleFonts.kanit(
                 fontSize: 14,
                 color: _hintColor,
@@ -207,22 +193,15 @@ class _LoginScreenState extends State<LoginScreen>
 
             // Email Field
             _buildEmailField(),
-            const SizedBox(height: 20),
-
-            // Password Field
-            _buildPasswordField(),
-            const SizedBox(height: 20),
-
-            // reCAPTCHA Placeholder
-            _buildRecaptchaSection(),
             const SizedBox(height: 24),
 
-            // Login Button
-            _buildLoginButton(),
+            // Send OTP Button
+            _buildSendOTPButton(),
+
             const SizedBox(height: 32),
 
-            // Register Link
-            _buildRegisterLink(),
+            // Login Link
+            _buildLoginLink(),
           ],
         ),
       ),
@@ -295,284 +274,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildPasswordField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.lock_outline, color: _cyanColor, size: 16),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Password',
-                style: GoogleFonts.kanit(
-                  color: _textColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () {
-                  Get.toNamed('/forgot-password');
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(
-                    'Forgot Password?',
-                    style: GoogleFonts.kanit(
-                      color: _cyanColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.underline,
-                      decorationColor: _cyanColor.withOpacity(0.5),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
-            boxShadow: [
-              BoxShadow(
-                color: _cyanColor.withOpacity(0.05),
-                blurRadius: 10,
-                spreadRadius: -2,
-              ),
-            ],
-          ),
-          child: TextFormField(
-            controller: _passwordController,
-            obscureText: _obscurePassword,
-            style: GoogleFonts.kanit(color: _textColor, fontSize: 15),
-            decoration: InputDecoration(
-              hintText: '••••••••',
-              hintStyle: GoogleFonts.kanit(color: _hintColor, fontSize: 14),
-              border: InputBorder.none,
-              prefixIcon: Container(
-                margin: const EdgeInsets.only(right: 8),
-                child: Icon(Icons.lock_outline, color: _cyanColor, size: 20),
-              ),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  color: _cyanColor.withOpacity(0.7),
-                  size: 20,
-                ),
-                onPressed: _togglePasswordVisibility,
-                tooltip: _obscurePassword ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 18,
-              ),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'กรุณากรอกรหัสผ่าน';
-              }
-              if (value.length < 6) {
-                return 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร';
-              }
-              return null;
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecaptchaSection() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return GestureDetector(
-          onTap: !_isRecaptchaVerified
-              ? () {
-                  setState(() {
-                    _isRecaptchaVerified = true;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Row(
-                        children: [
-                          const Icon(Icons.check_circle, color: Colors.white),
-                          const SizedBox(width: 12),
-                          Text(
-                            'ยืนยันตัวตนสำเร็จ! ✓',
-                            style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                      backgroundColor: Colors.green,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                }
-              : null,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _isRecaptchaVerified
-                  ? Colors.green.withOpacity(0.1)
-                  : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isRecaptchaVerified
-                    ? Colors.green
-                    : _cyanColor.withOpacity(0.3 + (_pulseController.value * 0.2)),
-                width: 2,
-              ),
-              boxShadow: _isRecaptchaVerified
-                  ? [
-                      BoxShadow(
-                        color: Colors.green.withOpacity(0.2),
-                        blurRadius: 15,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: _cyanColor.withOpacity(0.1),
-                        blurRadius: 10,
-                        spreadRadius: -2,
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                // Checkbox-style indicator
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: _isRecaptchaVerified
-                        ? Colors.green
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: _isRecaptchaVerified
-                          ? Colors.green
-                          : _hintColor,
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: _isRecaptchaVerified
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 20,
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 16),
-
-                // Text and Icon
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            _isRecaptchaVerified
-                                ? Icons.verified_user
-                                : Icons.security_outlined,
-                            color: _isRecaptchaVerified ? Colors.green : _cyanColor,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _isRecaptchaVerified
-                                  ? 'ยืนยันตัวตนสำเร็จ'
-                                  : 'ฉันไม่ใช่บอท',
-                              style: GoogleFonts.kanit(
-                                color: _isRecaptchaVerified ? Colors.green : _textColor,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (!_isRecaptchaVerified) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'คลิกเพื่อยืนยันตัวตน',
-                          style: GoogleFonts.kanit(
-                            color: _hintColor,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                // reCAPTCHA-style logo
-                if (!_isRecaptchaVerified)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.shield_outlined, color: _cyanColor, size: 16),
-                        const SizedBox(height: 2),
-                        Text(
-                          'reCAPTCHA',
-                          style: GoogleFonts.roboto(
-                            color: _hintColor,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _isRecaptchaVerified = false;
-                      });
-                    },
-                    icon: Icon(
-                      Icons.refresh_rounded,
-                      color: _cyanColor,
-                      size: 20,
-                    ),
-                    tooltip: 'รีเซ็ต',
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildLoginButton() {
+  Widget _buildSendOTPButton() {
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, child) {
@@ -604,7 +306,7 @@ class _LoginScreenState extends State<LoginScreen>
             ],
           ),
           child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleLogin,
+            onPressed: _isLoading ? null : _handleSendOTP,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               foregroundColor: Colors.white,
@@ -628,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'กำลังเข้าสู่ระบบ...',
+                        'กำลังส่ง OTP...',
                         style: GoogleFonts.kanit(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -640,10 +342,8 @@ class _LoginScreenState extends State<LoginScreen>
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.login_rounded, size: 22, color: Colors.white),
-                      const SizedBox(width: 12),
                       Text(
-                        'เข้าสู่ระบบ',
+                        'รับ OTP เพื่อยืนยัน',
                         style: GoogleFonts.kanit(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
@@ -652,7 +352,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 20, color: Colors.white),
+                      const Icon(Icons.send_rounded, size: 20, color: Colors.white),
                     ],
                   ),
           ),
@@ -661,14 +361,14 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildRegisterLink() {
+  Widget _buildLoginLink() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'New to RAMPART? ',
+            'จำรหัสผ่านได้แล้ว? ',
             style: GoogleFonts.kanit(
               color: _hintColor,
               fontSize: 14,
@@ -679,7 +379,7 @@ class _LoginScreenState extends State<LoginScreen>
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               onTap: () {
-                Get.toNamed('/register');
+                Get.back();
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -692,7 +392,7 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 child: Text(
-                  'Create Account',
+                  'เข้าสู่ระบบ',
                   style: GoogleFonts.kanit(
                     color: _cyanColor,
                     fontSize: 14,
@@ -703,8 +403,6 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          Icon(Icons.arrow_forward_rounded, color: _cyanColor, size: 16),
         ],
       ),
     );
@@ -1021,7 +719,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
             const SizedBox(height: 8),
-            ],
+          ],
         );
       },
     );
