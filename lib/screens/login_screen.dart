@@ -100,6 +100,28 @@ class _LoginScreenState extends State<LoginScreen>
       setState(() {
         _isLoading = false;
       });
+
+      // Navigate to home screen on successful login
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Text(
+                'เข้าสู่ระบบสำเร็จ!',
+                style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+
+      await Future.delayed(const Duration(milliseconds: 1500));
+      Get.offAllNamed('/home');
     }
   }
 

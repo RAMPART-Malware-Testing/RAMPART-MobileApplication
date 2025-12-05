@@ -171,8 +171,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
     await Future.delayed(const Duration(seconds: 1));
 
     if (navigateTo == '/home') {
-      // For now, redirect to login as /home doesn't exist yet
-      Get.offAllNamed('/login');
+      Get.offAllNamed('/home');
     } else if (navigateTo == '/reset-password') {
       // For now, redirect to login as /reset-password doesn't exist yet
       // TODO: Navigate to reset password screen

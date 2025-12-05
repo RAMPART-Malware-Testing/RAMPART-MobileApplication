@@ -4,6 +4,7 @@ import 'package:rampart/screens/login_screen.dart';
 import 'package:rampart/screens/register_screen.dart';
 import 'package:rampart/screens/confirm_screen.dart';
 import 'package:rampart/screens/forgot_password_screen.dart';
+import 'package:rampart/screens/main_screen.dart';
 import 'package:rampart/theme/app_theme.dart';
 
 void main() {
@@ -41,6 +42,12 @@ class MyApp extends StatelessWidget {
         GetPage(
           name: '/forgot-password',
           page: () => const ForgotPasswordScreen(),
+          transition: Transition.fadeIn,
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+        GetPage(
+          name: '/home',
+          page: () => const MainScreen(),
           transition: Transition.fadeIn,
           transitionDuration: const Duration(milliseconds: 300),
         ),
