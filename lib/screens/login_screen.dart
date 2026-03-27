@@ -1,8 +1,7 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:rampart/components/animated_logo_component.dart';
 import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -34,8 +33,6 @@ class _LoginScreenState extends State<LoginScreen>
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
   Color get _cyanColor =>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _blueColor =>
-      Theme.of(context).extension<CustomColors>()!.blueColor;
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
@@ -175,7 +172,9 @@ class _LoginScreenState extends State<LoginScreen>
             color: _cardColor,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Colors.white.withOpacity(0.1 + (_pulseController.value * 0.05)),
+              color: Colors.white.withOpacity(
+                0.1 + (_pulseController.value * 0.05),
+              ),
               width: 1.5,
             ),
             boxShadow: [
@@ -185,7 +184,9 @@ class _LoginScreenState extends State<LoginScreen>
                 spreadRadius: 2,
               ),
               BoxShadow(
-                color: _cyanColor.withOpacity(0.1 + (_pulseController.value * 0.1)),
+                color: _cyanColor.withOpacity(
+                  0.1 + (_pulseController.value * 0.1),
+                ),
                 blurRadius: 30,
                 spreadRadius: -5,
               ),
@@ -198,26 +199,17 @@ class _LoginScreenState extends State<LoginScreen>
         key: _formKey,
         child: Column(
           children: [
-            ShaderMask(
-              shaderCallback: (bounds) {
-                return LinearGradient(
-                  colors: [_textColor, _cyanColor, _textColor],
-                  stops: const [0.0, 0.5, 1.0],
-                ).createShader(bounds);
-              },
-              child: Text(
-                'เข้าสู่ระบบ',
-                style: GoogleFonts.kanit(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
+            Text(
+              'เข้าสู่ระบบ',
+              style: GoogleFonts.kanit(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 0.5,
               ),
             ),
-            const SizedBox(height: 8),
             Text(
-              'เข้าสู่ระบบเพื่อใช้บริการวิเคราะห์มัลแวร์',
+              'แพลตฟอร์มตรวจสอบมัลแวร์จากระยะไกลด้วยการทดสอบการทำงานแบบอัตโนมัติ',
               style: GoogleFonts.kanit(
                 fontSize: 14,
                 color: _hintColor,
@@ -225,19 +217,19 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
 
             // Email Field
             _buildEmailField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             // Password Field
             _buildPasswordField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             // reCAPTCHA Placeholder
             _buildRecaptchaSection(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
 
             // Login Button
             _buildLoginButton(),
@@ -342,9 +334,12 @@ class _LoginScreenState extends State<LoginScreen>
                   Get.toNamed('/forgot-password');
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Text(
-                    'Forgot Password?',
+                    'ลืมรหัสผ่าน ?',
                     style: GoogleFonts.kanit(
                       color: _cyanColor,
                       fontSize: 12,
@@ -433,7 +428,9 @@ class _LoginScreenState extends State<LoginScreen>
                           const SizedBox(width: 12),
                           Text(
                             'ยืนยันตัวตนสำเร็จ! ✓',
-                            style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+                            style: GoogleFonts.kanit(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
@@ -454,7 +451,9 @@ class _LoginScreenState extends State<LoginScreen>
               border: Border.all(
                 color: _isRecaptchaVerified
                     ? Colors.green
-                    : _cyanColor.withOpacity(0.3 + (_pulseController.value * 0.2)),
+                    : _cyanColor.withOpacity(
+                        0.3 + (_pulseController.value * 0.2),
+                      ),
                 width: 2,
               ),
               boxShadow: _isRecaptchaVerified
@@ -484,19 +483,13 @@ class _LoginScreenState extends State<LoginScreen>
                         ? Colors.green
                         : Colors.transparent,
                     border: Border.all(
-                      color: _isRecaptchaVerified
-                          ? Colors.green
-                          : _hintColor,
+                      color: _isRecaptchaVerified ? Colors.green : _hintColor,
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: _isRecaptchaVerified
-                      ? const Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 20,
-                        )
+                      ? const Icon(Icons.check, color: Colors.white, size: 20)
                       : null,
                 ),
                 const SizedBox(width: 16),
@@ -513,7 +506,9 @@ class _LoginScreenState extends State<LoginScreen>
                             _isRecaptchaVerified
                                 ? Icons.verified_user
                                 : Icons.security_outlined,
-                            color: _isRecaptchaVerified ? Colors.green : _cyanColor,
+                            color: _isRecaptchaVerified
+                                ? Colors.green
+                                : _cyanColor,
                             size: 20,
                           ),
                           const SizedBox(width: 8),
@@ -523,7 +518,9 @@ class _LoginScreenState extends State<LoginScreen>
                                   ? 'ยืนยันตัวตนสำเร็จ'
                                   : 'ฉันไม่ใช่บอท',
                               style: GoogleFonts.kanit(
-                                color: _isRecaptchaVerified ? Colors.green : _textColor,
+                                color: _isRecaptchaVerified
+                                    ? Colors.green
+                                    : _textColor,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -548,18 +545,23 @@ class _LoginScreenState extends State<LoginScreen>
                 // reCAPTCHA-style logo
                 if (!_isRecaptchaVerified)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                      ),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.shield_outlined, color: _cyanColor, size: 16),
+                        Icon(
+                          Icons.shield_outlined,
+                          color: _cyanColor,
+                          size: 16,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           'reCAPTCHA',
@@ -604,16 +606,15 @@ class _LoginScreenState extends State<LoginScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
-              colors: [
-                _primaryColor,
-                _cyanColor,
-              ],
+              colors: [_primaryColor, _cyanColor],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: _cyanColor.withOpacity(0.3 + (_pulseController.value * 0.2)),
+                color: _cyanColor.withOpacity(
+                  0.3 + (_pulseController.value * 0.2),
+                ),
                 blurRadius: 20,
                 spreadRadius: 0,
                 offset: const Offset(0, 4),
@@ -645,7 +646,9 @@ class _LoginScreenState extends State<LoginScreen>
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -662,7 +665,11 @@ class _LoginScreenState extends State<LoginScreen>
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.login_rounded, size: 22, color: Colors.white),
+                      const Icon(
+                        Icons.login_rounded,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         'เข้าสู่ระบบ',
@@ -674,7 +681,6 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 20, color: Colors.white),
                     ],
                   ),
           ),
@@ -690,7 +696,7 @@ class _LoginScreenState extends State<LoginScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'New to RAMPART? ',
+            'ยังไม่มีบัญชี? ',
             style: GoogleFonts.kanit(
               color: _hintColor,
               fontSize: 14,
@@ -714,7 +720,7 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                 ),
                 child: Text(
-                  'Create Account',
+                  'สร้างบัญชี',
                   style: GoogleFonts.kanit(
                     color: _cyanColor,
                     fontSize: 14,
@@ -726,7 +732,6 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.arrow_forward_rounded, color: _cyanColor, size: 16),
         ],
       ),
     );
@@ -746,256 +751,11 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildAnimatedLogo() {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_pulseController, _rotationController, _shimmerController]),
-      builder: (context, child) {
-        final pulseValue = _pulseController.value;
-        final rotationValue = _rotationController.value;
-        final shimmerValue = _shimmerController.value;
-
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Pulsing Background Effect
-            Transform.scale(
-              scale: 0.8 + (pulseValue * 0.4),
-              child: Container(
-                width: 160,
-                height: 160,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      _cyanColor.withOpacity(0.15 + (pulseValue * 0.1)),
-                      _blueColor.withOpacity(0.1),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
-                  ),
-                ),
-              ),
-            ),
-
-            // Outer rotating ring
-            Transform.rotate(
-              angle: rotationValue * 2 * pi,
-              child: Container(
-                width: 155,
-                height: 155,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _cyanColor.withOpacity(0.2),
-                    width: 1,
-                  ),
-                ),
-              ),
-            ),
-
-            // Main Logo Container
-            Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(35),
-                color: _cardColor,
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.15 + (pulseValue * 0.1)),
-                  width: 2,
-                ),
-                boxShadow: [
-                  // Outer Glow - animated
-                  BoxShadow(
-                    color: _cyanColor.withOpacity(0.3 + (pulseValue * 0.2)),
-                    blurRadius: 35 + (pulseValue * 10),
-                    spreadRadius: 5,
-                    offset: const Offset(0, 0),
-                  ),
-                  // Secondary Glow
-                  BoxShadow(
-                    color: _blueColor.withOpacity(0.2 + (pulseValue * 0.15)),
-                    blurRadius: 25,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 0),
-                  ),
-                  // Inner Shadow
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.4),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: const Offset(0, 4),
-                  ),
-                  // Soft Background Shadow
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 40,
-                    spreadRadius: 10,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _cardColor,
-                    _cardColor.withOpacity(0.95),
-                    _cardColor.withOpacity(0.85),
-                  ],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Animated Background Glow
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(35),
-                      gradient: RadialGradient(
-                        colors: [
-                          _cyanColor.withOpacity(0.15 + (pulseValue * 0.05)),
-                          _blueColor.withOpacity(0.08),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.1, 0.3, 0.8],
-                        center: Alignment(
-                          0.3 * cos(rotationValue * 2 * pi),
-                          0.3 * sin(rotationValue * 2 * pi),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Shimmer Effect Overlay
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(35),
-                    child: Transform.translate(
-                      offset: Offset(
-                        (shimmerValue - 0.5) * 280,
-                        (shimmerValue - 0.5) * 280,
-                      ),
-                      child: Container(
-                        width: 200,
-                        height: 300,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.transparent,
-                              Colors.white.withOpacity(0.15),
-                              Colors.white.withOpacity(0.08),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.3, 0.7, 1.0],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Main Logo
-                  Center(
-                    child: Container(
-                      width: 100,
-                      height: 90,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.4),
-                            blurRadius: 15,
-                            spreadRadius: 2,
-                            offset: const Offset(0, 4),
-                          ),
-                          BoxShadow(
-                            color: _cyanColor.withOpacity(0.2),
-                            blurRadius: 20,
-                            spreadRadius: 0,
-                            offset: const Offset(0, 0),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          'assets/images/RAMPART-LOGO.png',
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Animated Border
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(35),
-                      border: Border.all(
-                        color: _cyanColor.withOpacity(0.3 + (pulseValue * 0.2)),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-
-                  // Floating Particles
-                  ..._buildFloatingParticles(),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Helper method for floating particles
-  List<Widget> _buildFloatingParticles() {
-    return [
-      _buildParticle(15, 20, _cyanColor, 3, 0),
-      _buildParticle(115, 30, _blueColor, 2, 0.3),
-      _buildParticle(25, 105, _cyanColor, 2.5, 0.6),
-      _buildParticle(105, 115, _blueColor, 3, 0.9),
-      _buildParticle(70, 15, _cyanColor.withOpacity(0.5), 1.5, 0.15),
-      _buildParticle(65, 120, _blueColor.withOpacity(0.5), 1.5, 0.45),
-    ];
-  }
-
-  Widget _buildParticle(
-    double x,
-    double y,
-    Color color,
-    double size,
-    double phaseShift,
-  ) {
-    return Positioned(
-      left: x,
-      top: y,
-      child: AnimatedBuilder(
-        animation: _floatController,
-        builder: (context, child) {
-          final value = (_floatController.value + phaseShift) % 1.0;
-          return Transform.translate(
-            offset: Offset(
-              3 * cos(value * 2 * pi),
-              4 * sin(value * 2 * pi),
-            ),
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.5 + (_floatController.value * 0.3)),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.6),
-                    blurRadius: 6 + (_floatController.value * 4),
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    return AnimatedLogoComponent(
+      pulseController: _pulseController,
+      rotationController: _rotationController,
+      shimmerController: _shimmerController,
+      size: 140,
     );
   }
 
@@ -1005,45 +765,24 @@ class _LoginScreenState extends State<LoginScreen>
       builder: (context, child) {
         return Column(
           children: [
-            // Main Title with animated gradient
-            ShaderMask(
-              shaderCallback: (bounds) {
-                return LinearGradient(
-                  colors: [
-                    Colors.white,
-                    _cyanColor,
-                    _blueColor,
-                    Colors.white,
-                  ],
-                  stops: [
-                    0.0,
-                    0.3 + (_shimmerController.value * 0.2),
-                    0.7 + (_shimmerController.value * 0.2),
-                    1.0,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ).createShader(bounds);
-              },
-              child: Text(
-                'RAMPART',
-                style: GoogleFonts.kanit(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w900,
-                  height: 1.0,
-                  letterSpacing: 2,
-                  shadows: [
-                    Shadow(
-                      color: _cyanColor.withOpacity(0.5),
-                      blurRadius: 20,
-                      offset: const Offset(0, 0),
-                    ),
-                  ],
-                ),
+            Text(
+              'RAMPART',
+              style: GoogleFonts.kanit(
+                fontSize: 56,
+                fontWeight: FontWeight.w900,
+                height: 1.0,
+                letterSpacing: 2,
+                shadows: [
+                  Shadow(
+                    color: _cyanColor.withOpacity(0.5),
+                    blurRadius: 20,
+                    offset: const Offset(0, 0),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
-            ],
+          ],
         );
       },
     );

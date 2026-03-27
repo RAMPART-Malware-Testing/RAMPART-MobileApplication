@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -33,8 +32,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
   Color get _cyanColor =>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _blueColor =>
-      Theme.of(context).extension<CustomColors>()!.blueColor;
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
@@ -115,10 +112,10 @@ class _RegisterScreenState extends State<RegisterScreen>
 
         // Navigate to OTP verification screen
         await Future.delayed(const Duration(seconds: 1));
-        Get.toNamed('/confirm-otp', arguments: {
-          'email': _emailController.text,
-          'type': 'register',
-        });
+        Get.toNamed(
+          '/confirm-otp',
+          arguments: {'email': _emailController.text, 'type': 'register'},
+        );
       }
     }
   }
@@ -150,28 +147,9 @@ class _RegisterScreenState extends State<RegisterScreen>
             ],
           ),
         ),
-        child: SafeArea(
+        child: Center(
           child: Column(
             children: [
-              // Back Button
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(Icons.arrow_back_rounded, color: _textColor),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.05),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               // Content
               Expanded(
                 child: Center(
@@ -183,7 +161,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                         _buildHeader(),
                         const SizedBox(height: 16),
                         _buildRegisterCard(),
-                        _buildLoginLink(),
                       ],
                     ),
                   ),
@@ -202,43 +179,25 @@ class _RegisterScreenState extends State<RegisterScreen>
       builder: (context, child) {
         return Column(
           children: [
-            // Title
-            ShaderMask(
-              shaderCallback: (bounds) {
-                return LinearGradient(
-                  colors: [
-                    Colors.white,
-                    _cyanColor,
-                    _blueColor,
-                    Colors.white,
-                  ],
-                  stops: [
-                    0.0,
-                    0.3 + (_shimmerController.value * 0.2),
-                    0.7 + (_shimmerController.value * 0.2),
-                    1.0,
-                  ],
-                ).createShader(bounds);
-              },
-              child: Text(
-                'สมัครสมาชิก',
-                style: GoogleFonts.kanit(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 1,
-                ),
+            Text(
+              'สมัครสมาชิก',
+              style: GoogleFonts.kanit(
+                fontSize: 36,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 1,
               ),
             ),
             const SizedBox(height: 8),
 
             Text(
-              'สร้างบัญชีเพื่อเริ่มใช้งาน RAMPART',
+              'แพลตฟอร์มตรวจสอบมัลแวร์จากระยะไกลด้วยการทดสอบการทำงานแบบอัตโนมัติ',
               style: GoogleFonts.kanit(
                 fontSize: 14,
                 color: _hintColor,
                 fontWeight: FontWeight.w500,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         );
@@ -258,7 +217,9 @@ class _RegisterScreenState extends State<RegisterScreen>
             color: _cardColor,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Colors.white.withOpacity(0.1 + (_pulseController.value * 0.05)),
+              color: Colors.white.withOpacity(
+                0.1 + (_pulseController.value * 0.05),
+              ),
               width: 1.5,
             ),
             boxShadow: [
@@ -268,7 +229,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                 spreadRadius: 2,
               ),
               BoxShadow(
-                color: _cyanColor.withOpacity(0.1 + (_pulseController.value * 0.1)),
+                color: _cyanColor.withOpacity(
+                  0.1 + (_pulseController.value * 0.1),
+                ),
                 blurRadius: 30,
                 spreadRadius: -5,
               ),
@@ -284,22 +247,21 @@ class _RegisterScreenState extends State<RegisterScreen>
           children: [
             // Email Field
             _buildEmailField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             // Password Field
             _buildPasswordField(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
 
             // Confirm Password Field
             _buildConfirmPasswordField(),
-            const SizedBox(height: 24),
-
-            // Terms & Conditions
-            _buildTermsCheckbox(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 12),
 
             // Register Button
             _buildRegisterButton(),
+
+            const SizedBox(height: 8),
+            _buildLoginLink(),
           ],
         ),
       ),
@@ -359,7 +321,9 @@ class _RegisterScreenState extends State<RegisterScreen>
               if (value == null || value.isEmpty) {
                 return 'กรุณากรอกอีเมล';
               }
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
                 return 'กรุณากรอกอีเมลให้ถูกต้อง';
               }
               return null;
@@ -543,7 +507,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                   size: 20,
                 ),
                 onPressed: _toggleConfirmPasswordVisibility,
-                tooltip: _obscureConfirmPassword ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน',
+                tooltip: _obscureConfirmPassword
+                    ? 'แสดงรหัสผ่าน'
+                    : 'ซ่อนรหัสผ่าน',
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -565,67 +531,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  Widget _buildTermsCheckbox() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          height: 24,
-          width: 24,
-          child: Checkbox(
-            value: _acceptTerms,
-            onChanged: (value) {
-              setState(() {
-                _acceptTerms = value ?? false;
-              });
-            },
-            checkColor: _primaryColor,
-            fillColor: WidgetStateProperty.resolveWith<Color>((states) {
-              if (states.contains(WidgetState.selected)) {
-                return _cyanColor;
-              }
-              return Colors.transparent;
-            }),
-            side: BorderSide(color: _hintColor),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Wrap(
-            children: [
-              Text(
-                'ฉันยอมรับ ',
-                style: GoogleFonts.kanit(color: _textColor, fontSize: 13),
-              ),
-              GestureDetector(
-                onTap: () {
-                  // TODO: Show terms and conditions
-                },
-                child: Text(
-                  'ข้อกำหนดและเงื่อนไข',
-                  style: GoogleFonts.kanit(
-                    color: _cyanColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.underline,
-                    decorationColor: _cyanColor.withOpacity(0.5),
-                  ),
-                ),
-              ),
-              Text(
-                ' การใช้งาน',
-                style: GoogleFonts.kanit(color: _textColor, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRegisterButton() {
     return AnimatedBuilder(
       animation: _pulseController,
@@ -636,16 +541,15 @@ class _RegisterScreenState extends State<RegisterScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
-              colors: [
-                _primaryColor,
-                _cyanColor,
-              ],
+              colors: [_primaryColor, _cyanColor],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: _cyanColor.withOpacity(0.3 + (_pulseController.value * 0.2)),
+                color: _cyanColor.withOpacity(
+                  0.3 + (_pulseController.value * 0.2),
+                ),
                 blurRadius: 20,
                 spreadRadius: 0,
                 offset: const Offset(0, 4),
@@ -677,7 +581,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -694,7 +600,11 @@ class _RegisterScreenState extends State<RegisterScreen>
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.person_add_rounded, size: 22, color: Colors.white),
+                      const Icon(
+                        Icons.person_add_rounded,
+                        size: 22,
+                        color: Colors.white,
+                      ),
                       const SizedBox(width: 12),
                       Text(
                         'สมัครสมาชิก',
@@ -706,7 +616,6 @@ class _RegisterScreenState extends State<RegisterScreen>
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, size: 20, color: Colors.white),
                     ],
                   ),
           ),
@@ -759,7 +668,6 @@ class _RegisterScreenState extends State<RegisterScreen>
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.arrow_forward_rounded, color: _cyanColor, size: 16),
         ],
       ),
     );
