@@ -25,11 +25,9 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   // ใช้สีจาก Theme
-  Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _cyanColor =>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _textColor => Theme.of(context).colorScheme.onSurface;
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 

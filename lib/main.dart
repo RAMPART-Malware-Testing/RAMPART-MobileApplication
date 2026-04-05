@@ -25,31 +25,26 @@ class MyApp extends StatelessWidget {
           name: '/login',
           page: () => const LoginScreen(),
           transition: Transition.fadeIn,
-          // transitionDuration: const Duration(milliseconds: 100),
         ),
         GetPage(
           name: '/register',
           page: () => const RegisterScreen(),
-          transition: Transition.rightToLeft,
-          // transitionDuration: const Duration(milliseconds: 500),
+          transition: Transition.fadeIn,
         ),
         GetPage(
           name: '/confirm-otp',
           page: () => const ConfirmScreen(),
-          transition: Transition.rightToLeft,
-          // transitionDuration: const Duration(milliseconds: 300),
+          transition: Transition.fadeIn,
         ),
         GetPage(
           name: '/forgot-password',
           page: () => const ForgotPasswordScreen(),
           transition: Transition.fadeIn,
-          // transitionDuration: const Duration(milliseconds: 300),
         ),
         GetPage(
           name: '/home',
           page: () => const MainScreen(),
           transition: Transition.fadeIn,
-          // transitionDuration: const Duration(milliseconds: 300),
         ),
       ],
       unknownRoute: GetPage(
