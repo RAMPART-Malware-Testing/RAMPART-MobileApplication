@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/core/config.dart';
@@ -45,8 +47,10 @@ class AuthService {
     required String password,
     String? userAgent,
     String? ip,
-    String? deviceToken,
   }) async {
+    // await _storage.write(key: 'deivetoken', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsInR5cGUiOiJkZXZpY2UiLCJleHAiOjE3NzU5OTExNTksImlhdCI6MTc3NTM4NjM1OX0.PLAWPcExfmCKjBGEOog9R0UAsmkiQayYgw1xgzVijrw');
+    var deviceToken = await _storage.read(key: 'deivetoken');
+    // print(deviceToken);
     try {
       final res = await _http.post(
         '/api/login',
@@ -60,12 +64,40 @@ class AuthService {
         ),
       );
       if (res.data != null && res.data['success'] == true) {
-        final data = res.data['data'];
+        // {
+        //   success: true, 
+        //   status: LOGIN_SUCCESS, 
+        //   message: Login successful., 
+        //   data: {
+        //     access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzU5OTM4NTcsImlhdCI6MTc3NTM4OTA1N30.4aMNfbjGSHdSeVh_pbLpkpqhTVDsEBb0npIiJ_nWFUQ, 
+        //     data: {
+        //       username: a@a.com, 
+        //       uid: 14, 
+        //       status: active, 
+        //       created_at: 2026-04-01T11:21:10.608659+00:00, 
+        //       email: a@a.com, 
+        //       role: user, 
+        //       created_by: null
+        //     }, 
+        //     bypass_otp: true
+        //   }
+        // }
 
-        if (data != null && data['token'] != null) {
+        // print(res.data);
+        // print(res.data['data']['access_token']);
+        // print(res.data['data']['data']);
+        // print(res.data['data']['bypass_otp']);
+        if (res.data['data']['bypass_otp'] == true) {
           await _storage.write(
             key: 'session_token',
-            value: data['token'].toString(),
+            value: res.data['data']['access_token'].toString(),
+          );
+          await _storage.write(key: 'data', value: jsonEncode(res.data['data']['data']));
+          await _storage.write(key: 'session_type', value: "access");
+        } else if (res.data['data']['token'] != null) {
+          await _storage.write(
+            key: 'session_token',
+            value: res.data['data']['token'].toString(),
           );
           await _storage.write(key: 'session_type', value: "login_confirm");
         }
@@ -98,6 +130,22 @@ class AuthService {
           headers: _buildHeaders(userAgent: userAgent, ip: ip),
         ),
       );
+      if (res.data != null && res.data['success'] == true) {
+        final data = res.data['data'];
+
+        if (data != null && data['token'] != null) {
+          await _storage.write(
+            key: 'session_token',
+            value: data['access_token'].toString(),
+          );
+          await _storage.write(
+            key: 'deivetoken',
+            value: data['deiveToken'].toString(),
+          );
+          await _storage.write(key: 'data', value: jsonEncode(data['data']));
+          await _storage.write(key: 'session_type', value: "access");
+        }
+      }
       return res.data;
     } catch (e) {
       return _errorResponse;
@@ -114,6 +162,7 @@ class AuthService {
         '/api/register',
         data: {'username': username, 'email': email, 'password': password},
       );
+      print(res.data);
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
 

@@ -61,13 +61,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       // TODO: ดึง token จาก storage หรือ state management
       const token = 'your_auth_token_here';
 
-      final stats = await _dashboardService.getDashboardStats(
-        period: _selectedPeriod,
-        token: token,
-      );
+      // final stats = await _dashboardService.getDashboardStats(
+      //   period: _selectedPeriod,
+      //   token: token,
+      // );
 
       setState(() {
-        _stats = stats;
+        // _stats = stats;
         _isLoading = false;
       });
     } catch (e) {

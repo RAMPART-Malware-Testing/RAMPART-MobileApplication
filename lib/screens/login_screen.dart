@@ -72,13 +72,17 @@ class _LoginScreenState extends State<LoginScreen>
 
     setState(() => _isLoading = true);
     var res = await authService.login(email:_emailController.text,password: _passwordController.text);
+    setState(() => _isLoading = false);
     if (res['success']) {
       _showSnackBar('เข้าสู่ระบบสำเร็จ!', Colors.green, icon: Icons.check_circle);
+      if (res['data']['bypass_otp'] == true) {
+        Get.offAllNamed('/home');
+        return;
+      }
       Get.offAllNamed('/confirm-otp',arguments: { "type":"login"});
     } else {
       _showSnackBar(res['message'], Colors.red, icon: Icons.check_circle);
     }
-    setState(() => _isLoading = false);
   }
 
   void _showSnackBar(String message, Color color, {IconData? icon}) {
