@@ -176,8 +176,7 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
                         int number = index == 10 ? 0 : index + 1;
                         return _buildKeypadButton(
                           number: number,
-                          // onPressed: () => controller.addDigit(number),
-                          onPressed: () => {},
+                          onPressed: () => controller.addDigit(number, isSetupMode: false),
                         );
                       },
                     ),

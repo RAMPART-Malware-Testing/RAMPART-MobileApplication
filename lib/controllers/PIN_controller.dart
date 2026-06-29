@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart'; // เพิ่มมินิพอร์ตนี้เข้ามาด้วยครับ
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/pin_service.dart';
 
 class PINController extends GetxController {
   final _storage = const FlutterSecureStorage();
@@ -56,6 +57,7 @@ class PINController extends GetxController {
     } else {
       if (pin.value == _firstPin) {
         await _storage.write(key: 'user_pin', value: pin.value);
+        await authService.markAuthenticated();
         _showNotice('ตั้งค่ารหัส PIN เรียบร้อยแล้ว');
         _resetSetupState();
         Get.offAllNamed('/home');
@@ -89,11 +91,12 @@ class PINController extends GetxController {
       isLoading.value = false;
 
       if (res['success'] == true) {
+        Get.find<PINService>().unlock();
         pin.value = '';
         Get.offAllNamed('/home');
       } else {
         _showNotice('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง', isError: true);
-        //await authService.clearAuthData();
+        await authService.clearAuthData();
         pin.value = '';
         Get.offAllNamed('/login');
       }
@@ -104,7 +107,7 @@ class PINController extends GetxController {
 
       if (wrongCount.value >= maxAttempts) {
         _showNotice('กรอกรหัสผิดเกินกำหนด ระบบทำการล็อกเอาต์อัตโนมัติ', isError: true);
-        //await authService.clearAuthData();
+        await authService.clearAuthData();
         Get.offAllNamed('/login');
       } else {
         _showNotice('PIN ไม่ถูกต้อง (ระบุผิดไปแล้ว ${wrongCount.value}/$maxAttempts ครั้ง)', isError: true);

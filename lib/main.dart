@@ -7,15 +7,16 @@ import 'package:rampart/screens/register_screen.dart';
 import 'package:rampart/screens/confirm_screen.dart';
 import 'package:rampart/screens/forgot_password_screen.dart';
 import 'package:rampart/screens/main_screen.dart';
+import 'package:rampart/services/app_lifecycle_observer.dart';
 import 'package:rampart/services/pin_service.dart';
 import 'package:rampart/theme/app_theme.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); 
+  WidgetsFlutterBinding.ensureInitialized();
   final pinService = PINService();
-  await pinService.checkLoginStatus(); 
+  await pinService.checkLoginStatus();
   Get.put(pinService);
-  runApp(MyApp(initialRoute: pinService.initialRoute));
+  runApp(AppLifecycleObserver(child: MyApp(initialRoute: pinService.initialRoute)));
 }
 
 class MyApp extends StatelessWidget {

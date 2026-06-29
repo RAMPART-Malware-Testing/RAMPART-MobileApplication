@@ -63,12 +63,19 @@ class AuthService {
       );
       if (res.data != null && res.data['success'] == true) {
         if (res.data['data']['bypass_otp'] == true) {
+          String accessToken = res.data['data']['access_token'].toString();
+          await _storage.write(key: 'session_token', value: accessToken);
           await _storage.write(
-            key: 'session_token',
-            value: res.data['data']['access_token'].toString(),
+            key: 'data',
+            value: jsonEncode(res.data['data']['data'] ?? {}),
           );
-          await _storage.write(key: 'data', value: jsonEncode(res.data['data']['data']));
           await _storage.write(key: 'session_type', value: "access");
+          if (res.data['data']['refresh_token'] != null) {
+            await _storage.write(
+              key: 'refresh_token',
+              value: res.data['data']['refresh_token'].toString(),
+            );
+          }
         } else if (res.data['data']['token'] != null) {
           await _storage.write(
             key: 'session_token',
@@ -90,7 +97,7 @@ class AuthService {
     String? ip,
   }) async {
     var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null && sesstion_type != "login_confirm") {
+    if (sesstion_type == null || sesstion_type != "login_confirm") {
       return {
         "success": false,
         "status": 404,
@@ -107,17 +114,20 @@ class AuthService {
       );
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
-        if (data != null && data['token'] != null) {
-          await _storage.write(
-            key: 'session_token',
-            value: data['access_token'].toString(),
-          );
-          await _storage.write(
-            key: 'refresh_token',
-            value: data['refresh_token'].toString(),
-          );
-          await _storage.write(key: 'data', value: jsonEncode(data['data']));
-          await _storage.write(key: 'session_type', value: "access");
+        if (data != null) {
+          String accessToken = data['access_token'] ?? data['token'] ?? '';
+          String refreshToken = data['refresh_token'] ?? '';
+          if (accessToken.isNotEmpty) {
+            await _storage.write(key: 'session_token', value: accessToken);
+            if (refreshToken.isNotEmpty) {
+              await _storage.write(key: 'refresh_token', value: refreshToken);
+            }
+            await _storage.write(
+              key: 'data',
+              value: jsonEncode(data['data'] ?? {}),
+            );
+            await _storage.write(key: 'session_type', value: "access");
+          }
         }
       }
       return res.data;
@@ -225,26 +235,57 @@ class AuthService {
   }
 
   Future<Map<String, dynamic>> refreshAccessToken() async {
-    var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null && sesstion_type != "forgot_passwd_confirm") {
+    var sessionType = await _storage.read(key: 'session_type');
+    if (sessionType == null || sessionType != "access") {
       return {
         "success": false,
-        "status": 404,
-        "message": "Type Token ไม่ถูกต้อง",
+        "status": 401,
+        "message": "Session type mismatch or not authenticated",
       };
     }
     try {
+      var refreshToken = await _storage.read(key: 'refresh_token');
       final res = await _http.post(
-        '/api/reset-passwd/confirm',
+        '/api/refresh-token',
+        data: {if (refreshToken != null) 'refresh_token': refreshToken},
       );
+      if (res.data != null && res.data['success'] == true) {
+        final data = res.data['data'];
+        if (data != null) {
+          if (data['access_token'] != null) {
+            await _storage.write(
+              key: 'session_token',
+              value: data['access_token'].toString(),
+            );
+          }
+          if (data['refresh_token'] != null) {
+            await _storage.write(
+              key: 'refresh_token',
+              value: data['refresh_token'].toString(),
+            );
+          }
+        }
+      }
       return res.data;
     } catch (e) {
       return _errorResponse;
     }
   }
 
-  void clearAuthData() async {
+  Future<void> markAuthenticated() async {
+    await _storage.write(key: 'is_authenticated', value: 'true');
+  }
 
+  Future<void> clearAuthData() async {
+    await _storage.delete(key: 'session_token');
+    await _storage.delete(key: 'refresh_token');
+    await _storage.delete(key: 'session_type');
+    await _storage.delete(key: 'user_pin');
+    await _storage.delete(key: 'data');
+    await _storage.delete(key: 'jwt_token');
+    await _storage.delete(key: 'deivetoken');
+    await _storage.delete(key: 'deviceToken');
+    await _storage.delete(key: 'is_authenticated');
   }
 }
 

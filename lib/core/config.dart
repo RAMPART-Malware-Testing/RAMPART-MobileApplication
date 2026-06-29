@@ -1,3 +1,3 @@
 class Config {
-  static const String url_server = "https://af22-202-28-35-214.ngrok-free.app";
+  static const String url_server = "https://531f-202-28-33-179.ngrok-free.app";
 }
