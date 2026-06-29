@@ -99,8 +99,6 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
       } else if (_verificationType == 'register') {
         res = await authService.registerConfirm(token: token, otp: otp);
       } else if (_verificationType == 'forgot-passwd') {
-        print(otp);
-        print(_passwordController.text);
         res = await authService.resetPasswordConfirm(
           token: token, 
           otp: otp, 
@@ -123,7 +121,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
   void _navigateBasedOnType() {
     if (_verificationType == 'login') {
       _showSnackBar('เข้าสู่ระบบสำเร็จ', Colors.green, icon: Icons.check_circle);
-      Get.offAllNamed('/home');
+      Get.offAllNamed('/pin-setup');
     } else if (_verificationType == 'register') {
       _showSnackBar('ยืนยันตัวตนสำเร็จ กรุณาเข้าสู่ระบบ', Colors.green, icon: Icons.check_circle);
       Get.offAllNamed('/login');

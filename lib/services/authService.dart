@@ -48,9 +48,7 @@ class AuthService {
     String? userAgent,
     String? ip,
   }) async {
-    // await _storage.write(key: 'deivetoken', value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsInR5cGUiOiJkZXZpY2UiLCJleHAiOjE3NzU5OTExNTksImlhdCI6MTc3NTM4NjM1OX0.PLAWPcExfmCKjBGEOog9R0UAsmkiQayYgw1xgzVijrw');
     var deviceToken = await _storage.read(key: 'deivetoken');
-    // print(deviceToken);
     try {
       final res = await _http.post(
         '/api/login',
@@ -64,29 +62,6 @@ class AuthService {
         ),
       );
       if (res.data != null && res.data['success'] == true) {
-        // {
-        //   success: true, 
-        //   status: LOGIN_SUCCESS, 
-        //   message: Login successful., 
-        //   data: {
-        //     access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxNCIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3NzU5OTM4NTcsImlhdCI6MTc3NTM4OTA1N30.4aMNfbjGSHdSeVh_pbLpkpqhTVDsEBb0npIiJ_nWFUQ, 
-        //     data: {
-        //       username: a@a.com, 
-        //       uid: 14, 
-        //       status: active, 
-        //       created_at: 2026-04-01T11:21:10.608659+00:00, 
-        //       email: a@a.com, 
-        //       role: user, 
-        //       created_by: null
-        //     }, 
-        //     bypass_otp: true
-        //   }
-        // }
-
-        // print(res.data);
-        // print(res.data['data']['access_token']);
-        // print(res.data['data']['data']);
-        // print(res.data['data']['bypass_otp']);
         if (res.data['data']['bypass_otp'] == true) {
           await _storage.write(
             key: 'session_token',
@@ -132,15 +107,14 @@ class AuthService {
       );
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
-
         if (data != null && data['token'] != null) {
           await _storage.write(
             key: 'session_token',
             value: data['access_token'].toString(),
           );
           await _storage.write(
-            key: 'deivetoken',
-            value: data['deiveToken'].toString(),
+            key: 'refresh_token',
+            value: data['refresh_token'].toString(),
           );
           await _storage.write(key: 'data', value: jsonEncode(data['data']));
           await _storage.write(key: 'session_type', value: "access");
@@ -248,6 +222,29 @@ class AuthService {
     } catch (e) {
       return _errorResponse;
     }
+  }
+
+  Future<Map<String, dynamic>> refreshAccessToken() async {
+    var sesstion_type = await _storage.read(key: 'session_type');
+    if (sesstion_type == null && sesstion_type != "forgot_passwd_confirm") {
+      return {
+        "success": false,
+        "status": 404,
+        "message": "Type Token ไม่ถูกต้อง",
+      };
+    }
+    try {
+      final res = await _http.post(
+        '/api/reset-passwd/confirm',
+      );
+      return res.data;
+    } catch (e) {
+      return _errorResponse;
+    }
+  }
+
+  void clearAuthData() async {
+
   }
 }
 

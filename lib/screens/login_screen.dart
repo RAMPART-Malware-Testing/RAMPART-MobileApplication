@@ -30,10 +30,8 @@ class _LoginScreenState extends State<LoginScreen>
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
-  Color get _cyanColor =>
-      Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _hintColor =>
-      Theme.of(context).extension<CustomColors>()!.hintColor;
+  Color get _cyanColor => Theme.of(context).extension<CustomColors>()!.cyanColor;
+  Color get _hintColor => Theme.of(context).extension<CustomColors>()!.hintColor;
 
   @override
   void initState() {
@@ -76,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen>
     if (res['success']) {
       _showSnackBar('เข้าสู่ระบบสำเร็จ!', Colors.green, icon: Icons.check_circle);
       if (res['data']['bypass_otp'] == true) {
-        Get.offAllNamed('/home');
+        Get.offAllNamed('/pin-setup');
         return;
       }
       Get.offAllNamed('/confirm-otp',arguments: { "type":"login"});
