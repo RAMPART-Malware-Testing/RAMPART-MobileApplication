@@ -276,6 +276,22 @@ class AuthService {
     await _storage.write(key: 'is_authenticated', value: 'true');
   }
 
+  Future<void> registerFcmToken(String fcmToken) async {
+    var accessToken = await _storage.read(key: 'session_token');
+    if (accessToken == null || accessToken.isEmpty) return;
+    try {
+      await _http.post(
+        '/api/fcm/register',
+        data: {'fcm_token': fcmToken},
+        options: Options(
+          headers: {'x-access-token': accessToken},
+        ),
+      );
+    } catch (e) {
+      print('[AUTH] FCM token registration failed: $e');
+    }
+  }
+
   Future<void> clearAuthData() async {
     await _storage.delete(key: 'session_token');
     await _storage.delete(key: 'refresh_token');

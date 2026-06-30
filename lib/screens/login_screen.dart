@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/fcm_service.dart';
 import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,8 +31,10 @@ class _LoginScreenState extends State<LoginScreen>
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
-  Color get _cyanColor => Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _hintColor => Theme.of(context).extension<CustomColors>()!.hintColor;
+  Color get _cyanColor =>
+      Theme.of(context).extension<CustomColors>()!.cyanColor;
+  Color get _hintColor =>
+      Theme.of(context).extension<CustomColors>()!.hintColor;
 
   @override
   void initState() {
@@ -60,6 +63,13 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  void _registerFcmToken() {
+    final token = FcmService().deviceToken;
+    if (token != null) {
+      authService.registerFcmToken(token);
+    }
+  }
+
   void _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -69,15 +79,23 @@ class _LoginScreenState extends State<LoginScreen>
     }
 
     setState(() => _isLoading = true);
-    var res = await authService.login(email:_emailController.text,password: _passwordController.text);
+    var res = await authService.login(
+      email: _emailController.text,
+      password: _passwordController.text,
+    );
     setState(() => _isLoading = false);
     if (res['success']) {
-      _showSnackBar('เข้าสู่ระบบสำเร็จ!', Colors.green, icon: Icons.check_circle);
+      _showSnackBar(
+        'เข้าสู่ระบบสำเร็จ!',
+        Colors.green,
+        icon: Icons.check_circle,
+      );
+      _registerFcmToken();
       if (res['data']['bypass_otp'] == true) {
         Get.offAllNamed('/pin-setup');
         return;
       }
-      Get.offAllNamed('/confirm-otp',arguments: { "type":"login"});
+      Get.offAllNamed('/confirm-otp', arguments: {"type": "login"});
     } else {
       _showSnackBar(res['message'], Colors.red, icon: Icons.check_circle);
     }
