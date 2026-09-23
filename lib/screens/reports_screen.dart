@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_theme.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -9,9 +9,7 @@ class ReportsScreen extends StatefulWidget {
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
+class _ReportsScreenState extends State<ReportsScreen> {
 
   String _selectedFilter = 'all'; // all, malware, safe, pending
 
@@ -26,21 +24,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,7 +76,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           },
           child: Text(
             'รายงานทั้งหมด',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 28,
               fontWeight: FontWeight.w900,
               color: Colors.white,
@@ -102,7 +86,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         const SizedBox(height: 8),
         Text(
           'ประวัติการวิเคราะห์ไฟล์ของคุณ',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 14,
             color: _hintColor,
             fontWeight: FontWeight.w500,
@@ -159,7 +143,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             const SizedBox(width: 8),
             Text(
               label,
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 13,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? _cyanColor : _hintColor,
@@ -187,7 +171,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             const SizedBox(height: 16),
             Text(
               'ไม่พบรายงาน',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: _hintColor,
@@ -274,7 +258,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   children: [
                     Text(
                       report['fileName'],
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: _textColor,
@@ -285,7 +269,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                     const SizedBox(height: 4),
                     Text(
                       report['time'],
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 12,
                         color: _hintColor,
                       ),
@@ -304,7 +288,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 ),
                 child: Text(
                   statusLabel,
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: statusColor,
@@ -335,7 +319,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   Expanded(
                     child: Text(
                       'ตรวจพบ ${report['threatsFound']} ภัยคุกคาม',
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 12,
                         color: Colors.red,
                         fontWeight: FontWeight.w600,
@@ -357,7 +341,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   icon: Icon(Icons.visibility_outlined, size: 18),
                   label: Text(
                     'ดูรายละเอียด',
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),

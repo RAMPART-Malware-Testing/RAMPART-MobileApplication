@@ -20,7 +20,7 @@ class PINController extends GetxController {
       ScaffoldMessenger.of(Get.context!).clearSnackBars();
       ScaffoldMessenger.of(Get.context!).showSnackBar(
         SnackBar(
-          content: Text(message, style: const TextStyle(fontFamily: 'Kanit')),
+          content: Text(message, style: const TextStyle(fontFamily: 'Kanit', )),
           backgroundColor: isError ? Colors.red : Colors.green,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
@@ -78,7 +78,14 @@ class PINController extends GetxController {
 
   Future<void> _verifyPin() async {
     isLoading.value = true;
-    String? savedPin = await _storage.read(key: 'user_pin');
+    // อ่าน PIN กับตัวนับพร้อมกันในรอบเดียว (ลดการเข้าถึง Keystore)
+    final stored = await Future.wait([
+      _storage.read(key: 'user_pin'),
+      _storage.read(key: 'pin_wrong_count'),
+    ]);
+    String? savedPin = stored[0];
+    // ใช้ค่าที่เก็บไว้จริงเป็นหลัก กันตัวนับรีเซ็ตเมื่อปิดแอปแล้วเปิดใหม่
+    final persistedWrong = int.tryParse(stored[1] ?? '');
 
     if (savedPin == null) {
       savedPin = '123456'; 
@@ -86,32 +93,47 @@ class PINController extends GetxController {
     }
 
     if (pin.value == savedPin) {
+      // PIN ถูกต้อง: ปลดล็อกทันทีโดยไม่รอเครือข่าย
+      // เดิมบังคับให้ refresh token สำเร็จก่อน ถ้าเน็ตล่มจะถูกล้างเซสชันและต้อง login ใหม่
       wrongCount.value = 0;
-      final res = await authService.refreshAccessToken();
+      await _storage.write(key: 'pin_wrong_count', value: '0');
       isLoading.value = false;
-
-      if (res['success'] == true) {
-        Get.find<PINService>().unlock();
-        pin.value = '';
-        Get.offAllNamed('/home');
-      } else {
-        _showNotice('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง', isError: true);
-        await authService.clearAuthData();
-        pin.value = '';
-        Get.offAllNamed('/login');
-      }
+      Get.find<PINService>().unlock();
+      pin.value = '';
+      Get.offAllNamed('/home');
+      _refreshSessionInBackground();
     } else {
       isLoading.value = false;
       pin.value = ''; 
-      wrongCount.value++;
+      wrongCount.value = (persistedWrong ?? wrongCount.value) + 1;
+      await _storage.write(
+        key: 'pin_wrong_count',
+        value: wrongCount.value.toString(),
+      );
 
       if (wrongCount.value >= maxAttempts) {
         _showNotice('กรอกรหัสผิดเกินกำหนด ระบบทำการล็อกเอาต์อัตโนมัติ', isError: true);
         await authService.clearAuthData();
+        wrongCount.value = 0;
         Get.offAllNamed('/login');
       } else {
         _showNotice('PIN ไม่ถูกต้อง (ระบุผิดไปแล้ว ${wrongCount.value}/$maxAttempts ครั้ง)', isError: true);
       }
+    }
+  }
+
+  /// ต่ออายุ token เบื้องหลังหลังปลดล็อกแล้ว
+  /// - 401/403 = เซสชันตายจริง -> ล้างข้อมูลและกลับไปหน้า login
+  /// - 0 = คำขอไปไม่ถึงเซิร์ฟเวอร์ (เน็ต/timeout) -> คงเซสชันไว้ ไม่บังคับ login ใหม่
+  Future<void> _refreshSessionInBackground() async {
+    final res = await authService.refreshAccessToken();
+    if (res['success'] == true) return;
+
+    final status = res['status'];
+    if (status == 401 || status == 403) {
+      _showNotice('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง', isError: true);
+      await authService.clearAuthData();
+      Get.offAllNamed('/login');
     }
   }
 }

@@ -51,7 +51,7 @@ class AuthService {
     var deviceToken = await _storage.read(key: 'deivetoken');
     try {
       final res = await _http.post(
-        '/api/login',
+        '/api/auth/login',
         data: {'email': email, 'password': password},
         options: Options(
           headers: _buildHeaders(
@@ -106,7 +106,7 @@ class AuthService {
     }
     try {
       final res = await _http.post(
-        '/api/login/confirm',
+        '/api/auth/login/confirm',
         data: {'otp': otp, 'token': token},
         options: Options(
           headers: _buildHeaders(userAgent: userAgent, ip: ip),
@@ -143,7 +143,7 @@ class AuthService {
   }) async {
     try {
       final res = await _http.post(
-        '/api/register',
+        '/api/auth/register',
         data: {'username': username, 'email': email, 'password': password},
       );
       print(res.data);
@@ -178,7 +178,7 @@ class AuthService {
     }
     try {
       final res = await _http.post(
-        '/api/register/confirm',
+        '/api/auth/register/confirm',
         data: {'otp': otp, 'token': token},
       );
       return res.data;
@@ -189,7 +189,7 @@ class AuthService {
 
   Future<Map<String, dynamic>> resetPassword({required String email}) async {
     try {
-      final res = await _http.post('/api/reset-passwd', data: {'email': email});
+      final res = await _http.post('/api/auth/reset-passwd', data: {'email': email});
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
 
@@ -225,13 +225,26 @@ class AuthService {
     }
     try {
       final res = await _http.post(
-        '/api/reset-passwd/confirm',
+        '/api/auth/reset-passwd/confirm',
         data: {'otp': otp, 'token': token, 'newPasswd': newPasswd},
       );
       return res.data;
     } catch (e) {
       return _errorResponse;
     }
+  }
+
+  /// แยกสาเหตุความล้มเหลวของคำขอ refresh:
+  /// - เซิร์ฟเวอร์ตอบกลับด้วย error -> คืน HTTP status code (401/403/422 ...)
+  /// - ไม่ถึงเซิร์ฟเวอร์ (network/DNS/timeout/socket) หรือไม่ทราบสาเหตุ -> คืน 0
+  int _failureStatus(Object error) {
+    if (error is DioException) {
+      final response = error.response;
+      if (response != null) {
+        return response.statusCode ?? 0;
+      }
+    }
+    return 0;
   }
 
   Future<Map<String, dynamic>> refreshAccessToken() async {
@@ -246,29 +259,39 @@ class AuthService {
     try {
       var refreshToken = await _storage.read(key: 'refresh_token');
       final res = await _http.post(
-        '/api/refresh-token',
+        '/api/auth/refresh',
         data: {if (refreshToken != null) 'refresh_token': refreshToken},
       );
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
         if (data != null) {
-          if (data['access_token'] != null) {
-            await _storage.write(
-              key: 'session_token',
-              value: data['access_token'].toString(),
-            );
-          }
-          if (data['refresh_token'] != null) {
-            await _storage.write(
-              key: 'refresh_token',
-              value: data['refresh_token'].toString(),
-            );
+          final writes = <Future<void>>[
+            if (data['access_token'] != null)
+              _storage.write(
+                key: 'session_token',
+                value: data['access_token'].toString(),
+              ),
+            if (data['refresh_token'] != null)
+              _storage.write(
+                key: 'refresh_token',
+                value: data['refresh_token'].toString(),
+              ),
+          ];
+          if (writes.isNotEmpty) {
+            await Future.wait(writes);
           }
         }
       }
       return res.data;
     } catch (e) {
-      return _errorResponse;
+      final status = _failureStatus(e);
+      return {
+        "success": false,
+        "status": status,
+        "message": status == 0
+            ? "Connect Server Error!!!"
+            : "Server error HTTP $status",
+      };
     }
   }
 
@@ -293,15 +316,19 @@ class AuthService {
   }
 
   Future<void> clearAuthData() async {
-    await _storage.delete(key: 'session_token');
-    await _storage.delete(key: 'refresh_token');
-    await _storage.delete(key: 'session_type');
-    await _storage.delete(key: 'user_pin');
-    await _storage.delete(key: 'data');
-    await _storage.delete(key: 'jwt_token');
-    await _storage.delete(key: 'deivetoken');
-    await _storage.delete(key: 'deviceToken');
-    await _storage.delete(key: 'is_authenticated');
+    // ลบพร้อมกัน (Future.wait) ลดรอบการเข้าถึง Keystore
+    await Future.wait([
+      _storage.delete(key: 'session_token'),
+      _storage.delete(key: 'refresh_token'),
+      _storage.delete(key: 'session_type'),
+      _storage.delete(key: 'user_pin'),
+      _storage.delete(key: 'data'),
+      _storage.delete(key: 'jwt_token'),
+      _storage.delete(key: 'deivetoken'),
+      _storage.delete(key: 'deviceToken'),
+      _storage.delete(key: 'is_authenticated'),
+      _storage.delete(key: 'pin_wrong_count'),
+    ]);
   }
 }
 

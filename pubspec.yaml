@@ -36,7 +36,6 @@ dependencies:
   cupertino_icons: ^1.0.8
   get: ^4.7.2
   flex_color_scheme: ^8.3.0
-  google_fonts: ^6.3.2
   flutter_recaptcha_v2_compat: ^1.0.5
   http: ^1.6.0
   fl_chart: ^0.69.0
@@ -85,19 +84,13 @@ flutter:
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
   # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  # list giving the asset and other descriptors for the font.
+  fonts:
+    - family: Kanit
+      fonts:
+        - asset: fonts/Kanit-Regular.ttf
+        - asset: fonts/Kanit-Medium.ttf
+        - asset: fonts/Kanit-SemiBold.ttf
+        - asset: fonts/Kanit-Bold.ttf
+        - asset: fonts/Kanit-ExtraBold.ttf
+        - asset: fonts/Kanit-Black.ttf

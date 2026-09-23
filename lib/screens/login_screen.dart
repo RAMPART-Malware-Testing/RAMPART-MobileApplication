@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/services/authService.dart';
 import 'package:rampart/services/fcm_service.dart';
@@ -13,8 +13,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with TickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -22,10 +21,6 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isRecaptchaVerified = false;
-
-  late AnimationController _pulseController;
-  late AnimationController _shimmerController;
-  late AnimationController _rotationController;
 
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
@@ -35,33 +30,6 @@ class _LoginScreenState extends State<LoginScreen>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-    _shimmerController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    )..repeat();
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 4),
-      vsync: this,
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _shimmerController.dispose();
-    _rotationController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
 
   void _registerFcmToken() {
     final token = FcmService().deviceToken;
@@ -112,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen>
             ],
             Text(
               message,
-              style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+              style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -121,6 +89,19 @@ class _LoginScreenState extends State<LoginScreen>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _registerFcmToken();
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -143,16 +124,13 @@ class _LoginScreenState extends State<LoginScreen>
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                AnimatedLogoComponent(
-                  pulseController: _pulseController,
-                  rotationController: _rotationController,
-                  shimmerController: _shimmerController,
+                const AnimatedLogoComponent(
                   size: 140,
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'RAMPART',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 56,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
@@ -176,37 +154,29 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildLoginCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) => Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.white.withOpacity(
-              0.1 + (_pulseController.value * 0.05),
-            ),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 20,
-              spreadRadius: 2,
-            ),
-            BoxShadow(
-              color: _cyanColor.withOpacity(
-                0.1 + (_pulseController.value * 0.1),
-              ),
-              blurRadius: 30,
-              spreadRadius: -5,
-            ),
-          ],
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 400),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1.5,
         ),
-        child: child,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+          BoxShadow(
+            color: _cyanColor.withOpacity(0.1),
+            blurRadius: 30,
+            spreadRadius: -5,
+          ),
+        ],
       ),
       child: Form(
         key: _formKey,
@@ -214,7 +184,7 @@ class _LoginScreenState extends State<LoginScreen>
           children: [
             Text(
               'เข้าสู่ระบบ',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 32,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
@@ -222,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             Text(
               'เข้าสู่ระบบเพื่อใช้บริการวิเคราะห์มัลแวร์',
-              style: GoogleFonts.kanit(fontSize: 14, color: _hintColor),
+              style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: _hintColor),
             ),
             const SizedBox(height: 24),
             _buildTextField(
@@ -275,7 +245,7 @@ class _LoginScreenState extends State<LoginScreen>
             Expanded(
               child: Text(
                 label,
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   color: _textColor,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -287,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen>
                 onTap: () => Get.toNamed('/forgot-password'),
                 child: Text(
                   'ลืมรหัสผ่าน ?',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     color: _cyanColor,
                     fontSize: 12,
                     decoration: TextDecoration.underline,
@@ -300,11 +270,11 @@ class _LoginScreenState extends State<LoginScreen>
         TextFormField(
           controller: controller,
           obscureText: isPassword && _obscurePassword,
-          style: GoogleFonts.kanit(color: _textColor, fontSize: 15),
+          style: TextStyle(fontFamily: 'Kanit', color: _textColor, fontSize: 15),
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: GoogleFonts.kanit(color: _hintColor, fontSize: 14),
+            hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor, fontSize: 14),
             filled: true,
             fillColor: Colors.white.withOpacity(0.05),
             prefixIcon: Icon(icon, color: _cyanColor, size: 20),
@@ -363,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen>
             const SizedBox(width: 12),
             Text(
               _isRecaptchaVerified ? 'ยืนยันตัวตนสำเร็จ' : 'ฉันไม่ใช่บอท',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 color: _isRecaptchaVerified ? Colors.green : _textColor,
                 fontWeight: FontWeight.bold,
               ),
@@ -411,7 +381,7 @@ class _LoginScreenState extends State<LoginScreen>
               )
             : Text(
                 'เข้าสู่ระบบ',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
@@ -425,12 +395,12 @@ class _LoginScreenState extends State<LoginScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('ยังไม่มีบัญชี? ', style: GoogleFonts.kanit(color: _hintColor)),
+        Text('ยังไม่มีบัญชี? ', style: TextStyle(fontFamily: 'Kanit', color: _hintColor)),
         GestureDetector(
           onTap: () => Get.toNamed('/register'),
           child: Text(
             'สร้างบัญชี',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               color: _cyanColor,
               fontWeight: FontWeight.bold,
             ),

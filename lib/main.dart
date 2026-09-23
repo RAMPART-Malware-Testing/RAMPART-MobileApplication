@@ -16,7 +16,12 @@ import 'package:rampart/theme/app_theme.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  await FcmService().initialize();
+  // ตั้งค่า notification ล้มเหลวต้องไม่ทำให้แอปเริ่มไม่ขึ้น
+  try {
+    await FcmService().initialize();
+  } catch (e) {
+    print('[FCM] Initialization failed: $e');
+  }
   final pinService = PINService();
   await pinService.checkLoginStatus();
   Get.put(pinService);

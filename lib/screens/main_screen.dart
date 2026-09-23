@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../theme/app_theme.dart';
 import 'dashboard_screen.dart';
 import 'submit_file_screen.dart';
@@ -130,7 +130,7 @@ class _MainScreenState extends State<MainScreen> {
               const SizedBox(height: 4),
               Text(
                 label,
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   color: isActive ? _cyanColor : _hintColor,

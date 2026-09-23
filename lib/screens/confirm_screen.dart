@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/services/authService.dart';
 import '../theme/app_theme.dart';
@@ -55,7 +55,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
             Expanded(
               child: Text(
                 message,
-                style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+                style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -158,7 +158,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
                   const SizedBox(height: 24),
                   Text(
                     _verificationType == 'forgot-passwd' ? 'ตั้งรหัสผ่านใหม่' : 'ยืนยันรหัส OTP',
-                    style: GoogleFonts.kanit(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                    style: TextStyle(fontFamily: 'Kanit', fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: 40),
                   _buildMainCard(),
@@ -214,7 +214,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
         textAlign: TextAlign.center,
         keyboardType: TextInputType.number,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(1)],
-        style: GoogleFonts.kanit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+        style: TextStyle(fontFamily: 'Kanit', fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
         decoration: const InputDecoration(border: InputBorder.none),
       ),
     );
@@ -224,10 +224,10 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
     return TextField(
       controller: _passwordController,
       obscureText: !_isPasswordVisible,
-      style: GoogleFonts.kanit(color: Colors.white),
+      style: TextStyle(fontFamily: 'Kanit', color: Colors.white),
       decoration: InputDecoration(
         hintText: 'รหัสผ่านใหม่',
-        hintStyle: GoogleFonts.kanit(color: _hintColor),
+        hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor),
         prefixIcon: Icon(Icons.lock_outline, color: _cyanColor),
         suffixIcon: IconButton(
           icon: Icon(_isPasswordVisible ? Icons.visibility : Icons.visibility_off, color: _hintColor),
@@ -251,7 +251,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
         ),
         child: _isLoading
             ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : Text('ยืนยันข้อมูล', style: GoogleFonts.kanit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            : Text('ยืนยันข้อมูล', style: TextStyle(fontFamily: 'Kanit', fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
@@ -260,7 +260,7 @@ class _ConfirmScreenState extends State<ConfirmScreen> with TickerProviderStateM
     return TextButton.icon(
       onPressed: () => Get.offAllNamed('/login'),
       icon: Icon(Icons.arrow_back, size: 18, color: _cyanColor),
-      label: Text('ย้อนกลับหน้าหลัก', style: GoogleFonts.kanit(color: _cyanColor)),
+      label: Text('ย้อนกลับหน้าหลัก', style: TextStyle(fontFamily: 'Kanit', color: _cyanColor)),
     );
   }
 }

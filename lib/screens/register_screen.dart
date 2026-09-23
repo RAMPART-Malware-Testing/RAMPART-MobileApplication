@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/services/authService.dart';
 import '../theme/app_theme.dart';
@@ -12,7 +12,7 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStateMixin {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -24,10 +24,6 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   bool _obscureConfirmPassword = true;
   bool _isRecaptchaVerified = false;
 
-  late AnimationController _pulseController;
-  late AnimationController _shimmerController;
-  late AnimationController _rotationController;
-
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
@@ -38,16 +34,10 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
-    _shimmerController = AnimationController(duration: const Duration(seconds: 3), vsync: this)..repeat();
-    _rotationController = AnimationController(duration: const Duration(seconds: 4), vsync: this)..repeat();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _shimmerController.dispose();
-    _rotationController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -97,7 +87,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
               const SizedBox(width: 12),
             ],
             Expanded(
-              child: Text(message, style: GoogleFonts.kanit(fontWeight: FontWeight.w600)),
+              child: Text(message, style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -124,16 +114,13 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                AnimatedLogoComponent(
-                  pulseController: _pulseController,
-                  rotationController: _rotationController,
-                  shimmerController: _shimmerController,
+                const AnimatedLogoComponent(
                   size: 140,
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'RAMPART',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 56,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
@@ -152,29 +139,25 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   }
 
   Widget _buildRegisterCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) => Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.1 + (_pulseController.value * 0.05)), width: 1.5),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
-            BoxShadow(color: _cyanColor.withOpacity(0.1 + (_pulseController.value * 0.1)), blurRadius: 30, spreadRadius: -5),
-          ],
-        ),
-        child: child,
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 400),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
+          BoxShadow(color: _cyanColor.withOpacity(0.1), blurRadius: 30, spreadRadius: -5),
+        ],
       ),
       child: Form(
         key: _formKey,
         child: Column(
           children: [
-            Text('สมัครสมาชิก', style: GoogleFonts.kanit(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
-            Text('สมัครสมาชิกเพื่อใช้บริการวิเคราะห์มัลแวร์', style: GoogleFonts.kanit(fontSize: 14, color: _hintColor)),
+            Text('สมัครสมาชิก', style: TextStyle(fontFamily: 'Kanit', fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
+            Text('สมัครสมาชิกเพื่อใช้บริการวิเคราะห์มัลแวร์', style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: _hintColor)),
             const SizedBox(height: 24),
             _buildTextField(
               controller: _usernameController,
@@ -249,7 +232,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
             Icon(icon, color: _cyanColor, size: 16),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(label, style: GoogleFonts.kanit(color: _textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+              child: Text(label, style: TextStyle(fontFamily: 'Kanit', color: _textColor, fontWeight: FontWeight.w600, fontSize: 14)),
             ),
           ],
         ),
@@ -257,11 +240,11 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
         TextFormField(
           controller: controller,
           obscureText: isObscure,
-          style: GoogleFonts.kanit(color: _textColor, fontSize: 15),
+          style: TextStyle(fontFamily: 'Kanit', color: _textColor, fontSize: 15),
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: GoogleFonts.kanit(color: _hintColor, fontSize: 14),
+            hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor, fontSize: 14),
             filled: true,
             fillColor: Colors.white.withOpacity(0.05),
             prefixIcon: Icon(icon, color: _cyanColor, size: 20),
@@ -296,7 +279,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
             const SizedBox(width: 12),
             Text(
               _isRecaptchaVerified ? 'ยืนยันตัวตนสำเร็จ' : 'ฉันไม่ใช่บอท',
-              style: GoogleFonts.kanit(color: _isRecaptchaVerified ? Colors.green : _textColor, fontWeight: FontWeight.bold),
+              style: TextStyle(fontFamily: 'Kanit', color: _isRecaptchaVerified ? Colors.green : _textColor, fontWeight: FontWeight.bold),
             ),
             const Spacer(),
             Icon(Icons.security, color: _cyanColor, size: 20),
@@ -324,7 +307,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
         ),
         child: _isLoading
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text('สมัครสมาชิก', style: GoogleFonts.kanit(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+            : Text('สมัครสมาชิก', style: TextStyle(fontFamily: 'Kanit', fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
@@ -333,10 +316,10 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('มีบัญชีอยู่แล้ว? ', style: GoogleFonts.kanit(color: _hintColor)),
+        Text('มีบัญชีอยู่แล้ว? ', style: TextStyle(fontFamily: 'Kanit', color: _hintColor)),
         GestureDetector(
           onTap: () => Get.back(),
-          child: Text('เข้าสู่ระบบ', style: GoogleFonts.kanit(color: _cyanColor, fontWeight: FontWeight.bold)),
+          child: Text('เข้าสู่ระบบ', style: TextStyle(fontFamily: 'Kanit', color: _cyanColor, fontWeight: FontWeight.bold)),
         ),
       ],
     );

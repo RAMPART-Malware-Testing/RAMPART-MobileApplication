@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/services/authService.dart';
 import '../theme/app_theme.dart';
@@ -12,15 +12,11 @@ class ForgotPasswordScreen extends StatefulWidget {
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with TickerProviderStateMixin {
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
 
   bool _isLoading = false;
-
-  late AnimationController _pulseController;
-  late AnimationController _shimmerController;
-  late AnimationController _rotationController;
 
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
@@ -32,16 +28,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
-    _shimmerController = AnimationController(duration: const Duration(seconds: 3), vsync: this)..repeat();
-    _rotationController = AnimationController(duration: const Duration(seconds: 4), vsync: this)..repeat();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _shimmerController.dispose();
-    _rotationController.dispose();
     _emailController.dispose();
     super.dispose();
   }
@@ -74,7 +64,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
         content: Row(
           children: [
             if (icon != null) ...[Icon(icon, color: Colors.white), const SizedBox(width: 12)],
-            Expanded(child: Text(message, style: GoogleFonts.kanit(fontWeight: FontWeight.w600))),
+            Expanded(child: Text(message, style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w600))),
           ],
         ),
         backgroundColor: color,
@@ -100,16 +90,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                AnimatedLogoComponent(
-                  pulseController: _pulseController,
-                  rotationController: _rotationController,
-                  shimmerController: _shimmerController,
+                const AnimatedLogoComponent(
                   size: 140,
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'RAMPART',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 56,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
@@ -128,32 +115,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
   }
 
   Widget _buildForgotPasswordCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) => Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.1 + (_pulseController.value * 0.05)), width: 1.5),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
-            BoxShadow(color: _cyanColor.withOpacity(0.1 + (_pulseController.value * 0.1)), blurRadius: 30, spreadRadius: -5),
-          ],
-        ),
-        child: child,
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 400),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
+          BoxShadow(color: _cyanColor.withOpacity(0.1), blurRadius: 30, spreadRadius: -5),
+        ],
       ),
       child: Form(
         key: _formKey,
         child: Column(
           children: [
-            Text('ลืมรหัสผ่าน', style: GoogleFonts.kanit(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
+            Text('ลืมรหัสผ่าน', style: TextStyle(fontFamily: 'Kanit', fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white)),
             const SizedBox(height: 8),
             Text(
               'กรอกอีเมลเพื่อรับรหัส OTP สำหรับรีเซ็ตรหัสผ่าน',
-              style: GoogleFonts.kanit(fontSize: 14, color: _hintColor),
+              style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: _hintColor),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
@@ -179,18 +162,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
           children: [
             Icon(Icons.email_outlined, color: _cyanColor, size: 16),
             const SizedBox(width: 6),
-            Text('Email Address', style: GoogleFonts.kanit(color: _textColor, fontWeight: FontWeight.w600, fontSize: 14)),
+            Text('Email Address', style: TextStyle(fontFamily: 'Kanit', color: _textColor, fontWeight: FontWeight.w600, fontSize: 14)),
           ],
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _emailController,
-          style: GoogleFonts.kanit(color: _textColor, fontSize: 15),
+          style: TextStyle(fontFamily: 'Kanit', color: _textColor, fontSize: 15),
           keyboardType: TextInputType.emailAddress,
           validator: (v) => (v == null || !v.contains('@')) ? 'กรุณากรอกอีเมลให้ถูกต้อง' : null,
           decoration: InputDecoration(
             hintText: 'analyst@rampart.security',
-            hintStyle: GoogleFonts.kanit(color: _hintColor, fontSize: 14),
+            hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor, fontSize: 14),
             filled: true,
             fillColor: Colors.white.withOpacity(0.05),
             prefixIcon: Icon(Icons.email_outlined, color: _cyanColor, size: 20),
@@ -216,7 +199,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
         style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
         child: _isLoading
             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Text('รับรหัส OTP', style: GoogleFonts.kanit(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+            : Text('รับรหัส OTP', style: TextStyle(fontFamily: 'Kanit', fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }
@@ -225,12 +208,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('จำรหัสผ่านได้แล้ว? ', style: GoogleFonts.kanit(color: _hintColor)),
+        Text('จำรหัสผ่านได้แล้ว? ', style: TextStyle(fontFamily: 'Kanit', color: _hintColor)),
         GestureDetector(
           onTap: () => Get.back(),
           child: Text(
             'เข้าสู่ระบบ',
-            style: GoogleFonts.kanit(color: _cyanColor, fontWeight: FontWeight.bold),
+            style: TextStyle(fontFamily: 'Kanit', color: _cyanColor, fontWeight: FontWeight.bold),
           ),
         ),
       ],

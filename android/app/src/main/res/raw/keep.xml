@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ic_notification ถูกอ้างอิงจากฝั่ง Dart ด้วยชื่อ string เท่านั้น
+     (AndroidInitializationSettings('ic_notification') ใน fcm_service.dart)
+     resource shrinker จึงมองไม่เห็นการใช้งาน และจะตัด drawable นี้ออกใน release build
+     ทำให้ initialize() โยน PlatformException(invalid_icon) -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />

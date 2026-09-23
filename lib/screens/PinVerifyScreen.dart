@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/controllers/PIN_controller.dart';
+import 'package:rampart/services/authService.dart';
 import '../theme/app_theme.dart';
 
 class PinVerifyScreen extends StatefulWidget {
@@ -12,35 +13,30 @@ class PinVerifyScreen extends StatefulWidget {
   State<PinVerifyScreen> createState() => _PinVerifyScreenState();
 }
 
-class _PinVerifyScreenState extends State<PinVerifyScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _shimmerController;
-  late AnimationController _rotationController;
+class _PinVerifyScreenState extends State<PinVerifyScreen> {
+  bool _logoutInProgress = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-    _shimmerController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    )..repeat();
-    _rotationController = AnimationController(
-      duration: const Duration(seconds: 4),
-      vsync: this,
-    )..repeat();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _shimmerController.dispose();
-    _rotationController.dispose();
     super.dispose();
+  }
+
+  // ออกจากระบบ: ล้าง token/PIN ทั้งหมดก่อนนำทางไปหน้า login
+  // กันการแตะซ้ำระหว่างกำลังล้างข้อมูล (double tap)
+  Future<void> _handleLogout() async {
+    if (_logoutInProgress) return;
+    _logoutInProgress = true;
+    try {
+      await authService.clearAuthData();
+    } finally {
+      _logoutInProgress = false;
+    }
+    Get.offAllNamed('/login');
   }
 
   @override
@@ -73,16 +69,13 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AnimatedLogoComponent(
-                    pulseController: _pulseController,
-                    rotationController: _rotationController,
-                    shimmerController: _shimmerController,
+                  const AnimatedLogoComponent(
                     size: 140,
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'RAMPART',
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 56,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
@@ -98,7 +91,7 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
                   const SizedBox(height: 24),
                   Text(
                     'SECURITY PIN',
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
@@ -107,7 +100,7 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
                   ),
                   Text(
                     'กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าใช้งานแอปพลิเคชัน',
-                    style: GoogleFonts.kanit(fontSize: 14, color: hintColor),
+                    style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: hintColor),
                   ),
                   const SizedBox(height: 32),
                   Obx(() => Row(
@@ -162,9 +155,7 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
                         if (index == 9) {
                           return IconButton(
                             icon: Icon(Icons.logout, color: hintColor, size: 28),
-                            onPressed: () {
-                              Get.offAllNamed('/login');
-                            },
+                            onPressed: _handleLogout,
                           );
                         }
                         if (index == 11) {
@@ -203,7 +194,7 @@ class _PinVerifyScreenState extends State<PinVerifyScreen>
         child: Center(
           child: Text(
             number.toString(),
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 28,
               fontWeight: FontWeight.w600,
               color: Colors.white,

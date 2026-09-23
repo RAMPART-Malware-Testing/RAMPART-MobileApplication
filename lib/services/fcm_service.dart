@@ -27,7 +27,8 @@ Future<void> _ensureNotificationsInit() async {
   if (_notificationsInited) return;
   _notificationsInited = true;
 
-  const androidSettings = AndroidInitializationSettings('ic_launcher');
+  // ต้องเป็น drawable (ไม่ใช่ mipmap) ไม่งั้น initialize จะโยน PlatformException(invalid_icon)
+  const androidSettings = AndroidInitializationSettings('ic_notification');
   const iosSettings = DarwinInitializationSettings();
   const initSettings = InitializationSettings(
     android: androidSettings,

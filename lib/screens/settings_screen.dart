@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:get/get.dart';
 import '../theme/app_theme.dart';
 
@@ -10,9 +10,7 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
+class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = true;
@@ -28,21 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    super.dispose();
-  }
-
+  
   void _handleLogout() {
     showDialog(
       context: context,
@@ -57,7 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             const SizedBox(width: 12),
             Text(
               'ออกจากระบบ',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontWeight: FontWeight.w700,
                 color: _textColor,
               ),
@@ -66,7 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
         content: Text(
           'คุณต้องการออกจากระบบใช่หรือไม่?',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             color: _hintColor,
           ),
         ),
@@ -75,7 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             onPressed: () => Navigator.pop(context),
             child: Text(
               'ยกเลิก',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 color: _hintColor,
               ),
             ),
@@ -93,7 +77,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             child: Text(
               'ออกจากระบบ',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -153,7 +137,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           },
           child: Text(
             'ตั้งค่า',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 28,
               fontWeight: FontWeight.w900,
               color: Colors.white,
@@ -163,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         const SizedBox(height: 8),
         Text(
           'จัดการบัญชีและการตั้งค่า',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 14,
             color: _hintColor,
             fontWeight: FontWeight.w500,
@@ -174,87 +158,82 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Widget _buildProfileCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: _cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1 + (_pulseController.value * 0.05)),
-              width: 1.5,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+          ),
+          BoxShadow(
+            color: _cyanColor.withOpacity(0.1),
+            blurRadius: 30,
+            spreadRadius: -5,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_cyanColor, _blueColor],
+              ),
+              shape: BoxShape.circle,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-              ),
-              BoxShadow(
-                color: _cyanColor.withOpacity(0.1 + (_pulseController.value * 0.1)),
-                blurRadius: 30,
-                spreadRadius: -5,
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [_cyanColor, _blueColor],
-                  ),
-                  shape: BoxShape.circle,
+            child: Center(
+              child: Text(
+                'A',
+                style: TextStyle(fontFamily: 'Kanit', 
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
                 ),
-                child: Center(
-                  child: Text(
-                    'A',
-                    style: GoogleFonts.kanit(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Analyst User',
+                  style: TextStyle(fontFamily: 'Kanit', 
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Analyst User',
-                      style: GoogleFonts.kanit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'analyst@rampart.security',
-                      style: GoogleFonts.kanit(
-                        fontSize: 13,
-                        color: _hintColor,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                Text(
+                  'analyst@rampart.security',
+                  style: TextStyle(fontFamily: 'Kanit', 
+                    fontSize: 13,
+                    color: _hintColor,
+                  ),
                 ),
-              ),
-              IconButton(
-                onPressed: () {},
-                icon: Icon(
-                  Icons.edit_outlined,
-                  color: _cyanColor,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+          IconButton(
+            onPressed: () {},
+            icon: Icon(
+              Icons.edit_outlined,
+              color: _cyanColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -264,7 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       children: [
         Text(
           'ทั่วไป',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textColor,
@@ -366,7 +345,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: _textColor,
@@ -375,7 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 12,
                       color: _hintColor,
                     ),
@@ -396,7 +375,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       children: [
         Text(
           'เกี่ยวกับ',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textColor,
@@ -455,7 +434,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             Expanded(
               child: Text(
                 title,
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: _textColor,
@@ -465,7 +444,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             if (value.isNotEmpty)
               Text(
                 value,
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 13,
                   color: _hintColor,
                 ),
@@ -482,57 +461,52 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildLogoutButton() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return Container(
-          width: double.infinity,
-          height: 56,
-          decoration: BoxDecoration(
+Widget _buildLogoutButton() {
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            Colors.red.shade600,
+            Colors.red.shade400,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _handleLogout,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              colors: [
-                Colors.red.shade600,
-                Colors.red.shade400,
-              ],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.red.withOpacity(0.3 + (_pulseController.value * 0.2)),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: ElevatedButton(
-            onPressed: _handleLogout,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.logout, size: 22),
+            const SizedBox(width: 12),
+            Text(
+              'ออกจากระบบ',
+              style: TextStyle(fontFamily: 'Kanit', 
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.logout, size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  'ออกจากระบบ',
-                  style: GoogleFonts.kanit(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

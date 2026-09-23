@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
@@ -13,9 +13,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
+class _DashboardScreenState extends State<DashboardScreen> {
   final DashboardService _dashboardService = DashboardService();
 
   // State variables
@@ -38,16 +36,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
     _loadDashboardData();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -159,7 +152,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               },
               child: Text(
                 'RAMPART',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
@@ -169,7 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             Text(
               'Dashboard Analytics',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 12,
                 color: _hintColor,
                 fontWeight: FontWeight.w500,
@@ -203,74 +196,69 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildWelcomeCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                _cyanColor.withOpacity(0.2),
-                _blueColor.withOpacity(0.1),
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _cyanColor.withOpacity(0.2),
+            _blueColor.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _cyanColor.withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _cyanColor.withOpacity(0.2),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _cyanColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.analytics_outlined,
+              color: _cyanColor,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ภาพรวมระบบ',
+                  style: TextStyle(fontFamily: 'Kanit', 
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'สถิติการวิเคราะห์ไฟล์และมัลแวร์',
+                  style: TextStyle(fontFamily: 'Kanit', 
+                    fontSize: 13,
+                    color: _hintColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _cyanColor.withOpacity(0.3 + (_pulseController.value * 0.2)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: _cyanColor.withOpacity(0.2),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
           ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _cyanColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.analytics_outlined,
-                  color: _cyanColor,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ภาพรวมระบบ',
-                      style: GoogleFonts.kanit(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: _textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'สถิติการวิเคราะห์ไฟล์และมัลแวร์',
-                      style: GoogleFonts.kanit(
-                        fontSize: 13,
-                        color: _hintColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -285,7 +273,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 16),
           Text(
             'กำลังโหลดข้อมูล...',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               color: _hintColor,
               fontSize: 14,
             ),
@@ -309,7 +297,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 12),
           Text(
             'เกิดข้อผิดพลาด',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: Colors.red,
@@ -318,7 +306,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 8),
           Text(
             _error,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 13,
               color: _hintColor,
             ),
@@ -330,7 +318,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             icon: const Icon(Icons.refresh),
             label: Text(
               'ลองอีกครั้ง',
-              style: GoogleFonts.kanit(fontWeight: FontWeight.w600),
+              style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w600),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: _cyanColor,
@@ -350,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       children: [
         Text(
           'ไฟล์ Public ในระบบ',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textColor,
@@ -405,7 +393,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       children: [
         Text(
           'ไฟล์ของฉัน',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textColor,
@@ -474,7 +462,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           Text(
             label,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 14,
               fontWeight: FontWeight.w600,
               color: _textColor,
@@ -482,7 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           Text(
             _formatNumber(total),
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 24,
               fontWeight: FontWeight.w900,
               color: color,
@@ -493,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ส่วนแสดงจำนวนสมาชิก
+  // ส่วนแสดงจำนวนสมาชก
   Widget _buildMembersCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -536,7 +524,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               children: [
                 Text(
                   'สมาชิกในระบบ',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 14,
                     color: _hintColor,
                     fontWeight: FontWeight.w500,
@@ -545,7 +533,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 4),
                 Text(
                   _formatNumber(_stats!.totalMembers),
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 32,
                     fontWeight: FontWeight.w900,
                     color: _textColor,
@@ -555,7 +543,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 4),
                 Text(
                   'ผู้ใช้งานทั้งหมด (ไม่รวม admin)',
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 11,
                     color: _hintColor,
                   ),
@@ -610,7 +598,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               Text(
                 'คะแนนความเสี่ยงเฉลี่ย',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: _textColor,
@@ -625,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 child: Text(
                   riskLevel,
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: scoreColor,
@@ -653,7 +641,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     children: [
                       Text(
                         score.toStringAsFixed(1),
-                        style: GoogleFonts.kanit(
+                        style: TextStyle(fontFamily: 'Kanit', 
                           fontSize: 40,
                           fontWeight: FontWeight.w900,
                           color: scoreColor,
@@ -662,7 +650,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                       Text(
                         '/ 100',
-                        style: GoogleFonts.kanit(
+                        style: TextStyle(fontFamily: 'Kanit', 
                           fontSize: 16,
                           color: _hintColor,
                         ),
@@ -676,7 +664,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 16),
           Text(
             'คะแนนเฉลี่ยของไฟล์มัลแวร์ที่ตรวจพบในระบบ',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 12,
               color: _hintColor,
             ),
@@ -697,7 +685,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             Text(
               'TOP 10 มัลแวร์',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit',
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: _textColor,
@@ -752,7 +740,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
         child: Text(
           label,
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
             color: isSelected ? _cyanColor : _hintColor,
@@ -783,7 +771,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(height: 16),
             Text(
               'ไม่มีข้อมูลมัลแวร์',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: _hintColor,
@@ -792,7 +780,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(height: 8),
             Text(
               'ยังไม่มีการตรวจพบมัลแวร์ในช่วงเวลานี้',
-              style: GoogleFonts.kanit(
+              style: TextStyle(fontFamily: 'Kanit', 
                 fontSize: 12,
                 color: _hintColor.withOpacity(0.7),
               ),
@@ -829,7 +817,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 final malware = malwareData[groupIndex];
                 return BarTooltipItem(
                   '${malware.name}\n${malware.count} ไฟล์\n${malware.percentage.toStringAsFixed(1)}%',
-                  GoogleFonts.kanit(
+                  TextStyle(fontFamily: 'Kanit', 
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
@@ -855,7 +843,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       displayName,
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 10,
                         color: _hintColor,
                       ),
@@ -870,8 +858,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 reservedSize: 40,
                 getTitlesWidget: (value, meta) {
                   return Text(
-                    value.toInt().toString(),
-                    style: GoogleFonts.kanit(
+                    value.toInt().toInt().toString(),
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 10,
                       color: _hintColor,
                     ),
@@ -981,7 +969,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 child: Center(
                   child: Text(
                     '#${index + 1}',
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: color,
@@ -996,7 +984,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     Text(
                       malware.name,
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: _textColor,
@@ -1009,7 +997,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       children: [
                         Text(
                           '${malware.count} ไฟล์',
-                          style: GoogleFonts.kanit(
+                          style: TextStyle(fontFamily: 'Kanit', 
                             fontSize: 12,
                             color: _hintColor,
                           ),
@@ -1026,7 +1014,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                           child: Text(
                             '${malware.percentage.toStringAsFixed(1)}%',
-                            style: GoogleFonts.kanit(
+                            style: TextStyle(fontFamily: 'Kanit', 
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: color,
@@ -1090,7 +1078,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 20,
               fontWeight: FontWeight.w900,
               color: _textColor,
@@ -1100,7 +1088,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 4),
           Text(
             label,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 10,
               color: _hintColor,
               fontWeight: FontWeight.w500,

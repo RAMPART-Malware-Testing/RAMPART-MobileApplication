@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:file_picker/file_picker.dart';
 import '../theme/app_theme.dart';
 import '../models/file_upload.dart';
@@ -13,9 +13,7 @@ class SubmitFileScreen extends StatefulWidget {
   State<SubmitFileScreen> createState() => _SubmitFileScreenState();
 }
 
-class _SubmitFileScreenState extends State<SubmitFileScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
+class _SubmitFileScreenState extends State<SubmitFileScreen> {
   final FileUploadService _uploadService = FileUploadService();
 
   // File state
@@ -42,18 +40,9 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
-  @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat(reverse: true);
-  }
-
+  
   @override
   void dispose() {
-    _pulseController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -102,7 +91,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                   Expanded(
                     child: Text(
                       'เลือกไฟล์: $fileName',
-                      style: GoogleFonts.kanit(),
+                      style: TextStyle(fontFamily: 'Kanit', ),
                     ),
                   ),
                 ],
@@ -132,7 +121,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
               Expanded(
                 child: Text(
                   'กรุณาเลือกไฟล์ก่อนอัปโหลด',
-                  style: GoogleFonts.kanit(),
+                  style: TextStyle(fontFamily: 'Kanit', ),
                 ),
               ),
             ],
@@ -192,11 +181,11 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                     children: [
                       Text(
                         'อัปโหลดไฟล์สำเร็จ!',
-                        style: GoogleFonts.kanit(fontWeight: FontWeight.w700),
+                        style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w700),
                       ),
                       Text(
                         'กำลังเริ่มวิเคราะห์... (${_isPublic ? 'Public' : 'Private'})',
-                        style: GoogleFonts.kanit(fontSize: 12),
+                        style: TextStyle(fontFamily: 'Kanit', fontSize: 12),
                       ),
                     ],
                   ),
@@ -229,7 +218,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                 Expanded(
                   child: Text(
                     _error ?? 'เกิดข้อผิดพลาด',
-                    style: GoogleFonts.kanit(),
+                    style: TextStyle(fontFamily: 'Kanit', ),
                   ),
                 ),
               ],
@@ -339,7 +328,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
           },
           child: Text(
             'ส่งไฟล์วิเคราะห์',
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 28,
               fontWeight: FontWeight.w900,
               color: Colors.white,
@@ -349,7 +338,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
         const SizedBox(height: 8),
         Text(
           'อัปโหลดไฟล์เพื่อตรวจสอบมัลแวร์',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 14,
             color: _hintColor,
             fontWeight: FontWeight.w500,
@@ -360,177 +349,171 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
   }
 
   Widget _buildUploadCard() {
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        return Container(
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: _cardColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: _error != null
-                  ? Colors.red.withOpacity(0.5)
-                  : Colors.white
-                      .withOpacity(0.1 + (_pulseController.value * 0.05)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: (_error != null ? Colors.red : _cyanColor)
-                    .withOpacity(0.1 + (_pulseController.value * 0.1)),
-                blurRadius: 30,
-                spreadRadius: -5,
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: _error != null
+              ? Colors.red.withOpacity(0.5)
+              : Colors.white.withOpacity(0.1),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 20,
+            spreadRadius: 2,
           ),
-          child: Column(
-            children: [
-              // Upload Icon/Area
-              GestureDetector(
-                onTap: _isUploading ? null : _pickFile,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(48),
-                  decoration: BoxDecoration(
-                    color: _cyanColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _cyanColor.withOpacity(0.3),
-                      width: 2,
-                      style: BorderStyle.solid,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _fileInfo != null
-                            ? Icons.insert_drive_file
-                            : Icons.cloud_upload_outlined,
-                        size: 64,
-                        color: _cyanColor,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _fileInfo?.name ?? 'คลิกเพื่อเลือกไฟล์',
-                        style: GoogleFonts.kanit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: _textColor,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _fileInfo != null
-                            ? 'ขนาด: ${_fileInfo!.displaySize}'
-                            : 'รองรับไฟล์ทุกประเภท (ขนาดสูงสุด 100MB)',
-                        style: GoogleFonts.kanit(
-                          fontSize: 12,
-                          color: _hintColor,
-                        ),
-                      ),
-                    ],
-                  ),
+          BoxShadow(
+            color: (_error != null ? Colors.red : _cyanColor)
+                .withOpacity(0.1),
+            blurRadius: 30,
+            spreadRadius: -5,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Upload Icon/Area
+          GestureDetector(
+            onTap: _isUploading ? null : _pickFile,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(48),
+              decoration: BoxDecoration(
+                color: _cyanColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: _cyanColor.withOpacity(0.3),
+                  width: 2,
+                  style: BorderStyle.solid,
                 ),
               ),
-
-              // Error message
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: GoogleFonts.kanit(
-                            fontSize: 12,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-
-              // Upload Progress
-              if (_isUploading) ...[
-                LinearProgressIndicator(
-                  value: _uploadProgress,
-                  backgroundColor: Colors.white.withOpacity(0.1),
-                  valueColor: AlwaysStoppedAnimation<Color>(_cyanColor),
-                  borderRadius: BorderRadius.circular(4),
-                  minHeight: 8,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'กำลังอัปโหลด ${(_uploadProgress * 100).toInt()}%',
-                  style: GoogleFonts.kanit(
-                    fontSize: 14,
+              child: Column(
+                children: [
+                  Icon(
+                    _fileInfo != null
+                        ? Icons.insert_drive_file
+                        : Icons.cloud_upload_outlined,
+                    size: 64,
                     color: _cyanColor,
-                    fontWeight: FontWeight.w600,
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Upload Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isUploading ? null : _uploadFile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _cyanColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                  const SizedBox(height: 16),
+                  Text(
+                    _fileInfo?.name ?? 'คลิกเพื่อเลือกไฟล์',
+                    style: TextStyle(fontFamily: 'Kanit', 
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor,
                     ),
-                    elevation: 0,
-                    disabledBackgroundColor: _cyanColor.withOpacity(0.5),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _isUploading ? Icons.hourglass_empty : Icons.upload,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดและวิเคราะห์',
-                        style: GoogleFonts.kanit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    _fileInfo != null
+                        ? 'ขนาด: ${_fileInfo!.displaySize}'
+                        : 'รองรับไฟล์ทุกประเภท (ขนาดสูงสุด 100MB)',
+                    style: TextStyle(fontFamily: 'Kanit', 
+                      fontSize: 12,
+                      color: _hintColor,
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-        );
-      },
+
+          // Error message
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(fontFamily: 'Kanit', 
+                        fontSize: 12,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // Upload Progress
+          if (_isUploading) ...[
+            LinearProgressIndicator(
+              value: _uploadProgress,
+              backgroundColor: Colors.white.withOpacity(0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(_cyanColor),
+              borderRadius: BorderRadius.circular(4),
+              minHeight: 8,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'กำลังอัปโหลด ${(_uploadProgress * 100).toInt()}%',
+              style: TextStyle(fontFamily: 'Kanit', 
+                fontSize: 14,
+                color: _cyanColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Upload Button
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _isUploading ? null : _uploadFile,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _cyanColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                elevation: 0,
+                disabledBackgroundColor: _cyanColor.withOpacity(0.5),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _isUploading ? Icons.hourglass_empty : Icons.upload,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    _isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดและวิเคราะห์',
+                    style: TextStyle(fontFamily: 'Kanit', 
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -553,7 +536,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
               const SizedBox(width: 8),
               Text(
                 'ข้อมูลไฟล์',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: _textColor,
@@ -582,7 +565,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
           width: 80,
           child: Text(
             label,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 13,
               color: _hintColor,
             ),
@@ -591,7 +574,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
         Expanded(
           child: Text(
             value,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               fontSize: 13,
               color: _textColor,
               fontWeight: FontWeight.w600,
@@ -627,7 +610,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
               const SizedBox(width: 8),
               Text(
                 'การมองเห็น',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: _textColor,
@@ -644,7 +627,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                   children: [
                     Text(
                       _isPublic ? 'Public' : 'Private',
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: _textColor,
@@ -655,7 +638,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                       _isPublic
                           ? 'ผลการวิเคราะห์จะเป็นสาธารณะ'
                           : 'ผลการวิเคราะห์เป็นส่วนตัว (ค่าเริ่มต้น)',
-                      style: GoogleFonts.kanit(
+                      style: TextStyle(fontFamily: 'Kanit', 
                         fontSize: 12,
                         color: _hintColor,
                       ),
@@ -701,7 +684,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
               const SizedBox(width: 8),
               Text(
                 'คำอธิบาย (ไม่บังคับ)',
-                style: GoogleFonts.kanit(
+                style: TextStyle(fontFamily: 'Kanit', 
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: _textColor,
@@ -715,13 +698,13 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
             enabled: !_isUploading,
             maxLines: 3,
             maxLength: 200,
-            style: GoogleFonts.kanit(
+            style: TextStyle(fontFamily: 'Kanit', 
               color: _textColor,
               fontSize: 14,
             ),
             decoration: InputDecoration(
               hintText: 'เพิ่มคำอธิบายเกี่ยวกับไฟล์นี้...',
-              hintStyle: GoogleFonts.kanit(
+              hintStyle: TextStyle(fontFamily: 'Kanit', 
                 color: _hintColor,
                 fontSize: 13,
               ),
@@ -746,7 +729,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                   width: 2,
                 ),
               ),
-              counterStyle: GoogleFonts.kanit(
+              counterStyle: TextStyle(fontFamily: 'Kanit', 
                 color: _hintColor,
                 fontSize: 11,
               ),
@@ -763,7 +746,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
       children: [
         Text(
           'ข้อมูลที่ควรทราบ',
-          style: GoogleFonts.kanit(
+          style: TextStyle(fontFamily: 'Kanit', 
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textColor,
@@ -838,7 +821,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     color: _textColor,
@@ -847,7 +830,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen>
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: GoogleFonts.kanit(
+                  style: TextStyle(fontFamily: 'Kanit', 
                     fontSize: 12,
                     color: _hintColor,
                   ),

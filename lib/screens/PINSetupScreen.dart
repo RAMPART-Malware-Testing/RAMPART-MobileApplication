@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/controllers/PIN_controller.dart';
 import '../theme/app_theme.dart';
@@ -12,24 +12,14 @@ class PinSetupScreen extends StatefulWidget {
   State<PinSetupScreen> createState() => _PinSetupScreenState();
 }
 
-class _PinSetupScreenState extends State<PinSetupScreen> with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _shimmerController;
-  late AnimationController _rotationController;
-
+class _PinSetupScreenState extends State<PinSetupScreen> {
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(duration: const Duration(seconds: 2), vsync: this)..repeat(reverse: true);
-    _shimmerController = AnimationController(duration: const Duration(seconds: 3), vsync: this)..repeat();
-    _rotationController = AnimationController(duration: const Duration(seconds: 4), vsync: this)..repeat();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _shimmerController.dispose();
-    _rotationController.dispose();
     super.dispose();
   }
 
@@ -59,16 +49,13 @@ class _PinSetupScreenState extends State<PinSetupScreen> with TickerProviderStat
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AnimatedLogoComponent(
-                    pulseController: _pulseController,
-                    rotationController: _rotationController,
-                    shimmerController: _shimmerController,
+                  const AnimatedLogoComponent(
                     size: 120,
                   ),
                   const SizedBox(height: 10),
                   Obx(() => Text(
                     controller.isConfirmStage.value ? 'CONFIRM PIN' : 'CREATE NEW PIN',
-                    style: GoogleFonts.kanit(
+                    style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
@@ -77,7 +64,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> with TickerProviderStat
                   )),
                   Obx(() => Text(
                     controller.isConfirmStage.value ? 'กรุณากรอกรหัส PIN อีกครั้งเพื่อยืนยัน' : 'กำหนดรหัส PIN 6 หลักเพื่อความปลอดภัยในการเข้าแอป',
-                    style: GoogleFonts.kanit(fontSize: 14, color: hintColor),
+                    style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: hintColor),
                     textAlign: TextAlign.center,
                   )),
                   const SizedBox(height: 32),
@@ -155,7 +142,7 @@ class _PinSetupScreenState extends State<PinSetupScreen> with TickerProviderStat
         child: Center(
           child: Text(
             number.toString(),
-            style: GoogleFonts.kanit(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white),
+            style: TextStyle(fontFamily: 'Kanit', fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white),
           ),
         ),
       ),

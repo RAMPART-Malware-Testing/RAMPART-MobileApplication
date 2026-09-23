@@ -1,7 +1,6 @@
 // lib/theme/app_theme.dart
 import 'package:flutter/material.dart';
 import 'package:flex_color_scheme/flex_color_scheme.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // กำหนดสีจากธีมเว็บของคุณ
@@ -36,8 +35,7 @@ class AppTheme {
       visualDensity: FlexColorScheme.comfortablePlatformDensity,
       useMaterial3: true,
       swapLegacyOnMaterial3: true,
-      fontFamily: GoogleFonts.kanit().fontFamily,
-      textTheme: GoogleFonts.kanitTextTheme(),
+      fontFamily: 'Kanit',
       // สำหรับ Dark Theme ที่คุณใช้ในเว็บ
       scaffoldBackground: const Color(0xFF0f172a),
       // cardColor: const Color(0x0FFFFFFF),
@@ -68,8 +66,7 @@ class AppTheme {
       visualDensity: FlexColorScheme.comfortablePlatformDensity,
       useMaterial3: true,
       swapLegacyOnMaterial3: true,
-      fontFamily: GoogleFonts.kanit().fontFamily,
-      textTheme: GoogleFonts.kanitTextTheme(),
+      fontFamily: 'Kanit',
       // ตั้งค่าสำหรับ Dark Theme แบบเว็บของคุณ
       scaffoldBackground: const Color(0xFF0f172a),
       // cardColor: const Color(0x0FFFFFFF),
