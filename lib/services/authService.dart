@@ -169,7 +169,7 @@ class AuthService {
     required String otp,
   }) async {
     var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null && sesstion_type != "register_confirm") {
+    if (sesstion_type == null || sesstion_type != "register_confirm") {
       return {
         "success": false,
         "status": 404,
@@ -189,7 +189,10 @@ class AuthService {
 
   Future<Map<String, dynamic>> resetPassword({required String email}) async {
     try {
-      final res = await _http.post('/api/auth/reset-passwd', data: {'email': email});
+      final res = await _http.post(
+        '/api/auth/reset-passwd',
+        data: {'email': email},
+      );
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
 
@@ -216,7 +219,7 @@ class AuthService {
     required String newPasswd,
   }) async {
     var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null && sesstion_type != "forgot_passwd_confirm") {
+    if (sesstion_type == null || sesstion_type != "forgot_passwd_confirm") {
       return {
         "success": false,
         "status": 404,
@@ -299,6 +302,19 @@ class AuthService {
     await _storage.write(key: 'is_authenticated', value: 'true');
   }
 
+  /// โหลดข้อมูลผู้ใช้จาก API เพื่อยืนยันสิทธิ์เจ้าของรายงานก่อนแสดงตัวเลือก privacy
+  Future<Map<String, dynamic>> getProfile() async {
+    final token = await _storage.read(key: 'session_token');
+    if (token == null || token.isEmpty) return _errorResponse;
+    try {
+      final res = await _http.post('/api/profile', data: {'token': token});
+      if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
+      return _errorResponse;
+    } catch (_) {
+      return _errorResponse;
+    }
+  }
+
   Future<void> registerFcmToken(String fcmToken) async {
     var accessToken = await _storage.read(key: 'session_token');
     if (accessToken == null || accessToken.isEmpty) return;
@@ -306,13 +322,35 @@ class AuthService {
       await _http.post(
         '/api/fcm/register',
         data: {'fcm_token': fcmToken},
-        options: Options(
-          headers: {'x-access-token': accessToken},
-        ),
+        options: Options(headers: {'x-access-token': accessToken}),
       );
     } catch (e) {
       print('[AUTH] FCM token registration failed: $e');
     }
+  }
+
+  /// สถานะที่เซิร์ฟเวอร์ส่งกลับมาเมื่อ session ปัจจุบันใช้ไม่ได้แล้ว
+  /// ทั้งหมดนี้ผู้ใช้ต้องเริ่มยืนยันใหม่จากหน้า login — ไม่ใช่แค่ลอง OTP ใหม่อีกครั้ง
+  static const Set<String> deadSessionStatuses = {
+    'TOKEN_INVALID',
+    'TOKEN_WRONG_TYPE',
+    'TOKEN_EXPIRED',
+    'OTP_EXPIRED',
+  };
+
+  /// เซิร์ฟเวอร์ตอบ HTTP 200 แม้ session จะตายแล้ว (ไม่ throw) จึงต้องดู field `status`
+  /// ใน body ไม่ใช่ HTTP status code
+  static bool isDeadSession(Map<String, dynamic> res) =>
+      deadSessionStatuses.contains(res['status']);
+
+  /// ล้างเฉพาะ token ของขั้นตอนยืนยัน OTP ที่ค้างอยู่
+  /// ไม่แตะ PIN หรือ refresh_token เพราะผู้ใช้อาจมี session ที่ใช้ได้อยู่แล้ว
+  Future<void> clearStaleSession() async {
+    await Future.wait([
+      _storage.delete(key: 'session_token'),
+      _storage.delete(key: 'session_type'),
+      _storage.delete(key: 'data'),
+    ]);
   }
 
   Future<void> clearAuthData() async {

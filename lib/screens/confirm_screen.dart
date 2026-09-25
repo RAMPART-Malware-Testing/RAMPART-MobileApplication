@@ -125,16 +125,42 @@ class _ConfirmScreenState extends State<ConfirmScreen>
 
       if (res['success'] == true) {
         _navigateBasedOnType();
-      } else {
-        _showSnackBar(
-          res['message'] ?? 'เกิดข้อผิดพลาด',
-          Colors.red,
-          icon: Icons.error_outline,
-        );
+        return;
       }
+
+      // server ตอบ HTTP 200 แม้ session ตาย ต้องดู field `status` ไม่ใช่ HTTP code
+      if (AuthService.isDeadSession(res)) {
+        await _handleDeadSession();
+        return;
+      }
+
+      _showSnackBar(
+        res['message'] ?? 'เกิดข้อผิดพลาด',
+        Colors.red,
+        icon: Icons.error_outline,
+      );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted && _isLoading) setState(() => _isLoading = false);
     }
+  }
+
+  /// session หมดอายุ/ผิดชนิด/ถูกใช้ไปแล้ว — ล้าง token ที่ค้าง แล้วพากลับหน้า login
+  /// ไม่งั้นผู้ใช้จะค้างอยู่หน้านี้ และถ้าปิดแอปแล้วเปิดใหม่จะถูกพาเข้า /home
+  /// ด้วย token ที่ตายแล้ว (ดู PINService.checkLoginStatus)
+  Future<void> _handleDeadSession() async {
+    setState(() => _isLoading = false);
+    await authService.clearStaleSession();
+    if (!mounted) return;
+
+    _showSnackBar(
+      'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+      Colors.redAccent,
+      icon: Icons.timer_off_outlined,
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    if (!mounted) return;
+    Get.offAllNamed('/login');
   }
 
   void _navigateBasedOnType() {

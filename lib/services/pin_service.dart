@@ -35,12 +35,22 @@ class PINService extends GetxService {
   }
 
   Future<void> checkLoginStatus() async {
+    String? sessionType = await _storage.read(key: 'session_type');
     String? refreshToken = await _storage.read(key: 'refresh_token');
     String? sessionToken = await _storage.read(key: 'session_token');
     String? hasPin = await _storage.read(key: 'user_pin');
 
-    bool hasValidSession = refreshToken != null ||
-        (sessionToken != null && sessionToken != 'null' && sessionToken.isNotEmpty);
+    // ต้องเป็น session ที่ยืนยันเสร็จแล้วเท่านั้น ไม่ใช่แค่ "มี token ค้างอยู่"
+    // ไม่งั้น token ขั้นตอน login_confirm / register_confirm / forgot_passwd_confirm
+    // ที่ยังไม่ได้ยืนยันจะถูกนับเป็น session ที่ใช้ได้ และพาเข้า /home ทันที
+    bool hasAccessToken = sessionToken != null &&
+        sessionToken != 'null' &&
+        sessionToken.isNotEmpty;
+
+    // refreshAccessToken() ก็ปฏิเสธถ้า session_type ไม่ใช่ access เช่นกัน
+    // ดังนั้นไม่ว่าจะถือ token ชนิดใด ก็นับเป็น session ที่ใช้ได้ก็ต่อเมื่อผ่านการยืนยันแล้ว
+    bool hasValidSession =
+        sessionType == 'access' && (hasAccessToken || refreshToken != null);
 
     if (!hasValidSession) {
       initialRoute = '/login';
