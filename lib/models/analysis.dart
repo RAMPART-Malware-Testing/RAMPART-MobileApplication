@@ -143,8 +143,12 @@ enum ToolRunStatus {
 
   static ToolRunStatus fromRaw(dynamic raw) {
     if (raw == null) return ToolRunStatus.waiting;
-    if (raw is bool) return raw ? ToolRunStatus.completed : ToolRunStatus.failed;
-    if (raw is num) return raw != 0 ? ToolRunStatus.completed : ToolRunStatus.failed;
+    if (raw is bool) {
+      return raw ? ToolRunStatus.completed : ToolRunStatus.failed;
+    }
+    if (raw is num) {
+      return raw != 0 ? ToolRunStatus.completed : ToolRunStatus.failed;
+    }
 
     switch (raw.toString().trim().toLowerCase()) {
       case 'true':
@@ -207,6 +211,8 @@ class UploadResult {
   final String? filename;
   final bool deduplicated;
   final String? queueState;
+  final bool? found;
+  final bool gapFilled;
   final String message;
   final int statusCode;
 
@@ -219,9 +225,28 @@ class UploadResult {
     this.filename,
     this.deduplicated = false,
     this.queueState,
+    this.found,
+    this.gapFilled = false,
     this.message = '',
     this.statusCode = 0,
   });
+
+  /// Server attached this call to an already-analysed file: no new worker job
+  /// was created and [taskId] points at the existing analysis.
+  bool get isDuplicate => deduplicated || (found == true && !gapFilled);
+
+  /// check-hash hit, or an upload response marked `queue_state: reused`.
+  bool get isReused =>
+      (deduplicated && queueState?.trim().toLowerCase() == 'reused') ||
+      (found == true && !gapFilled);
+
+  bool get isCompletedReuse =>
+      isReused && status?.trim().toLowerCase() == 'success';
+
+  /// Prior analysis had gaps in one or more tools, so the backend re-dispatched
+  /// only the missing ones under a fresh task id.
+  bool get isGapFilled =>
+      gapFilled || queueState?.trim().toLowerCase() == 'gap_filled';
 
   factory UploadResult.fromJson(Map<String, dynamic> json) {
     return UploadResult(
@@ -233,6 +258,8 @@ class UploadResult {
       filename: _asString(json['filename'] ?? json['file_name']),
       deduplicated: _asBool(json['deduplicated']),
       queueState: _asString(json['queue_state']),
+      found: json['found'] == null ? null : _asBool(json['found']),
+      gapFilled: _asBool(json['gap_filled']),
       message: _asString(json['message']) ?? '',
       statusCode: _asInt(json['status']) ?? 0,
     );
@@ -361,6 +388,8 @@ class AnalysisReport {
   final String? recommendation;
   final String? analysisSummary;
   final String? geminiRecommendation;
+  final String? threatAssessment;
+  final String? behavior;
   final List<String> riskIndicators;
   final List<String> malwareSignatures;
 
@@ -389,6 +418,8 @@ class AnalysisReport {
     this.recommendation,
     this.analysisSummary,
     this.geminiRecommendation,
+    this.threatAssessment,
+    this.behavior,
     this.riskIndicators = const [],
     this.malwareSignatures = const [],
   });
@@ -421,6 +452,10 @@ class AnalysisReport {
       recommendation: _asString(json['recommendation']),
       analysisSummary: _asString(json['analysis_summary']),
       geminiRecommendation: _asString(json['gemini_recommendation']),
+      threatAssessment: _asString(
+        json['threat_assessment'] ?? json['threatAssessment'],
+      ),
+      behavior: _asString(json['behavior']),
       riskIndicators: _asStringList(json['risk_indicators']),
       malwareSignatures: _asStringList(json['malware_signatures']),
     );
@@ -436,6 +471,9 @@ class AnalysisReport {
         .where((e) => e.isNotEmpty)
         .toList();
   }
+
+  /// Gemini ถูกส่งกลับในรายงานงานหลัก ไม่ต้องเรียก report_target แยก
+  static bool usesEmbeddedReport(String tool) => toolRouteKey(tool) == 'gemini';
 
   /// ชื่อ route ของ report_target/download ใช้ "rampartai" ไม่มี underscore
   static String toolRouteKey(String tool) =>
@@ -465,7 +503,10 @@ class TaskStatusResult {
     this.httpStatus = 0,
   });
 
-  factory TaskStatusResult.fromJson(Map<String, dynamic> json, {int httpStatus = 200}) {
+  factory TaskStatusResult.fromJson(
+    Map<String, dynamic> json, {
+    int httpStatus = 200,
+  }) {
     final progress = _asMap(json['progress']);
     final report = _asMap(json['report']);
 
@@ -482,7 +523,11 @@ class TaskStatusResult {
   }
 
   factory TaskStatusResult.failure(String message, {int httpStatus = 0}) =>
-      TaskStatusResult(success: false, message: message, httpStatus: httpStatus);
+      TaskStatusResult(
+        success: false,
+        message: message,
+        httpStatus: httpStatus,
+      );
 
   AnalysisTaskStatus get taskStatus => AnalysisTaskStatus.fromRaw(status);
 
@@ -517,7 +562,10 @@ class ToolReportResult {
     this.httpStatus = 0,
   });
 
-  factory ToolReportResult.fromJson(Map<String, dynamic> json, {int httpStatus = 200}) {
+  factory ToolReportResult.fromJson(
+    Map<String, dynamic> json, {
+    int httpStatus = 200,
+  }) {
     return ToolReportResult(
       success: _asBool(json['success']),
       taskId: _asString(json['task_id']),
@@ -530,7 +578,11 @@ class ToolReportResult {
   }
 
   factory ToolReportResult.failure(String message, {int httpStatus = 0}) =>
-      ToolReportResult(success: false, message: message, httpStatus: httpStatus);
+      ToolReportResult(
+        success: false,
+        message: message,
+        httpStatus: httpStatus,
+      );
 }
 
 // ---------- ประวัติการวิเคราะห์ ----------

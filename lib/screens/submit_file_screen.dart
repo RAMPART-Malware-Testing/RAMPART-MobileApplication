@@ -1,15 +1,16 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../theme/app_theme.dart';
+
 import '../models/file_upload.dart';
 import '../services/analysis_service.dart';
 import '../services/pin_service.dart';
+import '../widgets/analysis_components.dart';
 
 class SubmitFileScreen extends StatefulWidget {
-  const SubmitFileScreen({Key? key}) : super(key: key);
+  const SubmitFileScreen({super.key});
 
   @override
   State<SubmitFileScreen> createState() => _SubmitFileScreenState();
@@ -18,127 +19,61 @@ class SubmitFileScreen extends StatefulWidget {
 class _SubmitFileScreenState extends State<SubmitFileScreen> {
   final AnalysisService _analysisService = AnalysisService();
 
-  // File state
   File? _selectedFile;
   SelectedFileInfo? _fileInfo;
   bool _isUploading = false;
-  double _uploadProgress = 0.0;
+  double _uploadProgress = 0;
   String? _error;
-
-  // Visibility state (default = private)
-  bool _isPublic = false;
-
-  // Optional description
-  final TextEditingController _descriptionController = TextEditingController();
-
-  // ใช้สีจาก Theme
-  Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
-  Color get _cardColor => Theme.of(context).cardColor;
-  Color get _textColor => Theme.of(context).colorScheme.onSurface;
-  Color get _cyanColor =>
-      Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _blueColor =>
-      Theme.of(context).extension<CustomColors>()!.blueColor;
-  Color get _hintColor =>
-      Theme.of(context).extension<CustomColors>()!.hintColor;
-
-  
-  @override
-  void dispose() {
-    _descriptionController.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickFile() async {
     try {
-      // ตัวเลือกไฟล์เป็น Activity ภายนอก ทำให้แอปถูกมองว่าไปอยู่เบื้องหลัง
-      // ต้องยกเว้นการล็อก PIN ชั่วคราว ไม่งั้นกลับมาแล้วจะโดนเด้งไปหน้า PIN
-      // และไฟล์ที่เลือกไว้หายไป
       if (Get.isRegistered<PINService>()) {
         Get.find<PINService>().suppressLockBriefly();
       }
-
-      // เปิด file picker
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
       );
+      if (!mounted || result == null) return;
 
-      if (!mounted) return;
-
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        final fileName = result.files.single.name;
-        final fileSize = result.files.single.size;
-        final extension = result.files.single.extension;
-
-        // ตรวจสอบขนาดไฟล์ (backend จำกัด 1GB — ตรงกับ AnalysisService.maxUploadBytes)
-        if (fileSize > AnalysisService.maxUploadBytes) {
-          setState(() {
-            _error = 'ขนาดไฟล์เกิน 1GB กรุณาเลือกไฟล์ที่มีขนาดเล็กกว่า';
-          });
-          return;
-        }
-
-        setState(() {
-          _selectedFile = file;
-          _fileInfo = SelectedFileInfo(
-            name: fileName,
-            path: file.path,
-            size: fileSize,
-            extension: extension,
-          );
-          _error = null;
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'เลือกไฟล์: $fileName',
-                      style: TextStyle(fontFamily: 'Kanit', ),
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: _cyanColor,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+      final picked = result.files.single;
+      final path = picked.path;
+      if (path == null) return;
+      if (picked.size > AnalysisService.maxUploadBytes) {
+        setState(
+          () => _error = 'ขนาดไฟล์เกิน 1GB กรุณาเลือกไฟล์ที่มีขนาดเล็กกว่า',
+        );
+        return;
       }
-    } catch (e) {
-      if (!mounted) return;
+
       setState(() {
-        _error = 'เกิดข้อผิดพลาดในการเลือกไฟล์: $e';
+        _selectedFile = File(path);
+        _fileInfo = SelectedFileInfo(
+          name: picked.name,
+          path: path,
+          size: picked.size,
+          extension: picked.extension,
+        );
+        _error = null;
       });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = 'เกิดข้อผิดพลาดในการเลือกไฟล์: $error');
     }
   }
 
   Future<void> _uploadFile() async {
     if (_selectedFile == null || _fileInfo == null) {
-      // ยังไม่ได้เลือกไฟล์ — เปิดตัวเลือกไฟล์ก่อน แล้วอัปโหลดต่อทันทีเมื่อเลือกสำเร็จ
       await _pickFile();
-      if (!mounted) return;
-      // ผู้ใช้กดยกเลิกในตัวเลือกไฟล์
-      if (_selectedFile == null || _fileInfo == null) return;
+      if (!mounted || _selectedFile == null || _fileInfo == null) return;
     }
-
     await _startUpload();
   }
 
-  /// อัปโหลดไฟล์ที่เลือกไว้จริง — แยกออกมาเพื่อให้ทั้งปุ่มอัปโหลด
-  /// และขั้นตอนเลือกไฟล์อัตโนมัติเรียกใช้เส้นทางเดียวกัน
   Future<void> _startUpload() async {
     setState(() {
       _isUploading = true;
-      _uploadProgress = 0.0;
+      _uploadProgress = 0;
       _error = null;
     });
 
@@ -146,144 +81,133 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
       final result = await _analysisService.uploadFile(
         file: _selectedFile!,
         fileName: _fileInfo!.name,
-        // API ใช้ privacy โดย true = ส่วนตัว ซึ่งกลับกับ _isPublic ของหน้านี้
-        privacy: !_isPublic,
+        privacy: true,
         onProgress: (sent, total) {
           if (!mounted || total <= 0) return;
-          setState(() {
-            _uploadProgress = sent / total;
-          });
+          setState(() => _uploadProgress = sent / total);
         },
       );
-
       if (!mounted) return;
-
       if (!result.success || result.taskId == null) {
         setState(() {
           _isUploading = false;
-          _error = result.message;
+          _error = result.message.isEmpty ? 'อัปโหลดไม่สำเร็จ' : result.message;
         });
-        _showErrorSnack(
-          result.message.isEmpty ? 'อัปโหลดไม่สำเร็จ' : result.message,
-        );
         return;
       }
 
       setState(() {
         _isUploading = false;
-        _uploadProgress = 1.0;
+        _uploadProgress = 1;
       });
 
-      // แสดง success message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'อัปโหลดไฟล์สำเร็จ!',
-                        style: TextStyle(fontFamily: 'Kanit', fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        'กำลังเริ่มวิเคราะห์... (${_isPublic ? 'Public' : 'Private'})',
-                        style: TextStyle(fontFamily: 'Kanit', fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
+      final reused = result.isReused;
+      final completedReuse = result.isCompletedReuse;
+      final gapFilled = result.isGapFilled;
+
+      debugPrint(
+        'RAMPART_DEDUP reused=$reused completed=$completedReuse '
+        'gapFilled=$gapFilled duplicate=${result.isDuplicate} '
+        'status=${result.status} queueState=${result.queueState} '
+        'found=${result.found} taskId=${result.taskId}',
+      );
+
+      if (reused && completedReuse) {
+        _showMessage(
+          'พบไฟล์นี้ในระบบแล้ว กำลังเปิดผลวิเคราะห์เดิม',
+          AnalysisColors.completed,
+          Icons.verified_outlined,
+        );
+      } else if (reused) {
+        _showMessage(
+          'พบไฟล์นี้กำลังวิเคราะห์อยู่ กำลังติดตามงานเดิม',
+          AnalysisColors.cyan,
+          Icons.hourglass_top,
+        );
+      } else if (gapFilled) {
+        _showMessage(
+          'พบไฟล์นี้เดิม กำลังวิเคราะห์ส่วนที่ขาด',
+          AnalysisColors.purple,
+          Icons.refresh,
+        );
+      } else {
+        _showMessage(
+          'อัปโหลดสำเร็จ กำลังวิเคราะห์...',
+          AnalysisColors.completed,
+          Icons.check_circle,
         );
       }
 
-      // Reset form แล้วพาไปหน้าติดตามความคืบหน้าการวิเคราะห์
-      await Future.delayed(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
       if (!mounted) return;
       _resetForm();
-      Get.toNamed('/analysis-progress', arguments: result.taskId);
-    } catch (e) {
+      final route = completedReuse ? '/analysis-result' : '/analysis-progress';
+      Get.toNamed(route, arguments: result.taskId);
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _isUploading = false;
-        _error = e.toString().replaceAll('Exception: ', '');
+        _error = error.toString().replaceFirst('Exception: ', '');
       });
-      _showErrorSnack(_error ?? 'เกิดข้อผิดพลาด');
     }
-  }
-
-  void _showErrorSnack(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(message, style: const TextStyle(fontFamily: 'Kanit')),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
-    );
   }
 
   void _resetForm() {
     setState(() {
       _selectedFile = null;
       _fileInfo = null;
-      _isPublic = false;
-      _uploadProgress = 0.0;
+      _uploadProgress = 0;
       _error = null;
-      _descriptionController.clear();
     });
+  }
+
+  void _showMessage(String message, Color color, IconData icon) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontFamily: 'Kanit')),
+            ),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0f172a),
-              _backgroundColor,
-              const Color(0xFF1e293b),
-            ],
+            colors: [AnalysisColors.background, AnalysisColors.surface],
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(),
-                const SizedBox(height: 24),
-                _buildUploadCard(),
-                const SizedBox(height: 16),
-                if (_fileInfo != null) _buildFileInfoCard(),
-                if (_fileInfo != null) const SizedBox(height: 16),
-                if (_fileInfo != null) _buildVisibilityCard(),
-                if (_fileInfo != null) const SizedBox(height: 16),
-                if (_fileInfo != null) _buildDescriptionCard(),
-                const SizedBox(height: 24),
-                _buildInfoCards(),
+                const SizedBox(height: 20),
+                _buildDropzone(),
+                if (_fileInfo != null) ...[
+                  const SizedBox(height: 14),
+                  _buildFileInfo(),
+                  const SizedBox(height: 14),
+                  _buildPrivacy(),
+                ],
+                const SizedBox(height: 22),
+                _buildInfo(),
               ],
             ),
           ),
@@ -296,195 +220,150 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ShaderMask(
-          shaderCallback: (bounds) {
-            return LinearGradient(
-              colors: [_cyanColor, _blueColor],
-            ).createShader(bounds);
-          },
-          child: Text(
-            'ส่งไฟล์วิเคราะห์',
-            style: TextStyle(fontFamily: 'Kanit', 
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-            ),
+        const Text(
+          'สแกนไฟล์',
+          style: TextStyle(
+            fontFamily: 'Kanit',
+            fontSize: 27,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'อัปโหลดไฟล์เพื่อตรวจสอบมัลแวร์',
-          style: TextStyle(fontFamily: 'Kanit', 
-            fontSize: 14,
-            color: _hintColor,
-            fontWeight: FontWeight.w500,
+        const SizedBox(height: 6),
+        const Text(
+          'อัปโหลดไฟล์เพื่อวิเคราะห์มัลแวร์ด้วยเครื่องมือหลายตัว',
+          style: TextStyle(
+            fontFamily: 'Kanit',
+            fontSize: 13,
+            color: AnalysisColors.textSecondary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildUploadCard() {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: _error != null
-              ? Colors.red.withOpacity(0.5)
-              : Colors.white.withOpacity(0.1),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-          BoxShadow(
-            color: (_error != null ? Colors.red : _cyanColor)
-                .withOpacity(0.1),
-            blurRadius: 30,
-            spreadRadius: -5,
-          ),
-        ],
-      ),
+  Widget _buildDropzone() {
+    return AnalysisCard(
+      padding: const EdgeInsets.all(14),
       child: Column(
         children: [
-          // Upload Icon/Area
-          GestureDetector(
+          InkWell(
             onTap: _isUploading ? null : _pickFile,
+            borderRadius: BorderRadius.circular(14),
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(48),
+              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 18),
               decoration: BoxDecoration(
-                color: _cyanColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
+                color: AnalysisColors.cyan.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: _cyanColor.withOpacity(0.3),
-                  width: 2,
-                  style: BorderStyle.solid,
+                  color: _error == null
+                      ? AnalysisColors.cyan.withValues(alpha: 0.35)
+                      : AnalysisColors.failed.withValues(alpha: 0.5),
+                  width: 1.5,
                 ),
               ),
               child: Column(
                 children: [
                   Icon(
-                    _fileInfo != null
-                        ? Icons.insert_drive_file
-                        : Icons.cloud_upload_outlined,
-                    size: 64,
-                    color: _cyanColor,
+                    _fileInfo == null
+                        ? Icons.cloud_upload_outlined
+                        : Icons.insert_drive_file,
+                    size: 58,
+                    color: AnalysisColors.cyan,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Text(
-                    _fileInfo?.name ?? 'คลิกเพื่อเลือกไฟล์',
-                    style: TextStyle(fontFamily: 'Kanit', 
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: _textColor,
-                    ),
-                    textAlign: TextAlign.center,
+                    _fileInfo?.name ?? 'คลิกหรือลากไฟล์มาวางที่นี่',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontFamily: 'Kanit',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AnalysisColors.textPrimary,
+                    ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
                   Text(
-                    _fileInfo != null
-                        ? 'ขนาด: ${_fileInfo!.displaySize}'
-                        : 'รองรับไฟล์ทุกประเภท (ขนาดสูงสุด 1GB)',
-                    style: TextStyle(fontFamily: 'Kanit', 
+                    _fileInfo == null
+                        ? 'รองรับไฟล์ทุกประเภท สูงสุด 1GB'
+                        : 'ขนาด ${_fileInfo!.displaySize}',
+                    style: const TextStyle(
+                      fontFamily: 'Kanit',
                       fontSize: 12,
-                      color: _hintColor,
+                      color: AnalysisColors.textSecondary,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-
-          // Error message
           if (_error != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.red, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(fontFamily: 'Kanit', 
-                        fontSize: 12,
-                        color: Colors.red,
-                      ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: AnalysisColors.failed,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(
+                      fontFamily: 'Kanit',
+                      fontSize: 12,
+                      color: AnalysisColors.failed,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ],
-
-          const SizedBox(height: 24),
-
-          // Upload Progress
           if (_isUploading) ...[
-            LinearProgressIndicator(
-              value: _uploadProgress,
-              backgroundColor: Colors.white.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(_cyanColor),
-              borderRadius: BorderRadius.circular(4),
-              minHeight: 8,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'กำลังอัปโหลด ${(_uploadProgress * 100).toInt()}%',
-              style: TextStyle(fontFamily: 'Kanit', 
-                fontSize: 14,
-                color: _cyanColor,
-                fontWeight: FontWeight.w600,
+            const SizedBox(height: 18),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: _uploadProgress,
+                minHeight: 7,
+                backgroundColor: AnalysisColors.surfaceElevated,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  AnalysisColors.cyan,
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Text(
+              'อัปโหลด ${(_uploadProgress * 100).toStringAsFixed(0)}%',
+              style: const TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AnalysisColors.cyan,
+              ),
+            ),
           ],
-
-          // Upload Button
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
+            height: 52,
+            child: ElevatedButton.icon(
               onPressed: _isUploading ? null : _uploadFile,
+              icon: Icon(_isUploading ? Icons.hourglass_top : Icons.upload),
+              label: Text(
+                _isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดและวิเคราะห์',
+              ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _cyanColor,
+                backgroundColor: AnalysisColors.cyan,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: 0,
-                disabledBackgroundColor: _cyanColor.withOpacity(0.5),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _isUploading ? Icons.hourglass_empty : Icons.upload,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    _isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดและวิเคราะห์',
-                    style: TextStyle(fontFamily: 'Kanit', 
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
@@ -493,221 +372,68 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
     );
   }
 
-  Widget _buildFileInfoCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-        ),
-      ),
+  Widget _buildFileInfo() {
+    final info = _fileInfo!;
+    return AnalysisCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.info_outline, color: _cyanColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'ข้อมูลไฟล์',
-                style: TextStyle(fontFamily: 'Kanit', 
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: _textColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoRow('ชื่อไฟล์', _fileInfo!.name),
-          const SizedBox(height: 8),
-          _buildInfoRow('ขนาด', _fileInfo!.displaySize),
-          if (_fileInfo!.extension != null) ...[
-            const SizedBox(height: 8),
-            _buildInfoRow('ประเภท', '.${_fileInfo!.extension}'),
-          ],
+          const AnalysisSectionTitle('ข้อมูลไฟล์'),
+          const SizedBox(height: 10),
+          _row('ชื่อไฟล์', info.name),
+          _row('ขนาด', info.displaySize),
+          if (info.extension?.isNotEmpty == true)
+            _row('ประเภท', '.${info.extension}'),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: TextStyle(fontFamily: 'Kanit', 
-              fontSize: 13,
-              color: _hintColor,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: TextStyle(fontFamily: 'Kanit', 
-              fontSize: 13,
-              color: _textColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVisibilityCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _isPublic
-              ? _cyanColor.withOpacity(0.3)
-              : Colors.white.withOpacity(0.1),
-        ),
-      ),
-      child: Column(
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                _isPublic ? Icons.public : Icons.lock,
-                color: _isPublic ? _cyanColor : Colors.orange,
-                size: 20,
+          SizedBox(
+            width: 82,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 12,
+                color: AnalysisColors.textSecondary,
               ),
-              const SizedBox(width: 8),
-              Text(
-                'การมองเห็น',
-                style: TextStyle(fontFamily: 'Kanit', 
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: _textColor,
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _isPublic ? 'Public' : 'Private',
-                      style: TextStyle(fontFamily: 'Kanit', 
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _isPublic
-                          ? 'ผลการวิเคราะห์จะเป็นสาธารณะ'
-                          : 'ผลการวิเคราะห์เป็นส่วนตัว (ค่าเริ่มต้น)',
-                      style: TextStyle(fontFamily: 'Kanit', 
-                        fontSize: 12,
-                        color: _hintColor,
-                      ),
-                    ),
-                  ],
-                ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 12,
+                color: AnalysisColors.textPrimary,
               ),
-              Switch(
-                value: _isPublic,
-                onChanged: _isUploading
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _isPublic = value;
-                        });
-                      },
-                activeTrackColor: _cyanColor,
-                inactiveThumbColor: Colors.grey,
-              ),
-            ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDescriptionCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildPrivacy() {
+    return AnalysisCard(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(Icons.description_outlined, color: _cyanColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'คำอธิบาย (ไม่บังคับ)',
-                style: TextStyle(fontFamily: 'Kanit', 
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: _textColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _descriptionController,
-            enabled: !_isUploading,
-            maxLines: 3,
-            maxLength: 200,
-            style: TextStyle(fontFamily: 'Kanit', 
-              color: _textColor,
-              fontSize: 14,
-            ),
-            decoration: InputDecoration(
-              hintText: 'เพิ่มคำอธิบายเกี่ยวกับไฟล์นี้...',
-              hintStyle: TextStyle(fontFamily: 'Kanit', 
-                color: _hintColor,
-                fontSize: 13,
-              ),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.05),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Colors.white.withOpacity(0.1),
-                ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: Colors.white.withOpacity(0.1),
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: _cyanColor.withOpacity(0.5),
-                  width: 2,
-                ),
-              ),
-              counterStyle: TextStyle(fontFamily: 'Kanit', 
-                color: _hintColor,
-                fontSize: 11,
+          const Icon(Icons.lock, size: 19, color: AnalysisColors.purple),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'ส่วนตัว — เฉพาะคุณ',
+              style: TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 12,
+                color: AnalysisColors.textSecondary,
               ),
             ),
           ),
@@ -716,106 +442,91 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
     );
   }
 
-  Widget _buildInfoCards() {
+  Widget _buildInfo() {
+    const items = [
+      (
+        Icons.security,
+        'การรักษาความปลอดภัย',
+        'ไฟล์ของคุณจะถูกจัดเก็บอย่างปลอดภัย',
+        AnalysisColors.completed,
+      ),
+      (
+        Icons.bolt,
+        'การวิเคราะห์รวดเร็ว',
+        'ผลการวิเคราะห์จะพร้อมภายในไม่กี่นาที',
+        AnalysisColors.cyan,
+      ),
+      (
+        Icons.analytics,
+        'รายงานละเอียด',
+        'ตรวจสอบผลจากเครื่องมือหลายตัว',
+        AnalysisColors.purple,
+      ),
+      (
+        Icons.lock,
+        'ความเป็นส่วนตัว',
+        'ไฟล์ส่วนตัวจะมองเห็นได้เฉพาะคุณ',
+        AnalysisColors.blue,
+      ),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'ข้อมูลที่ควรทราบ',
-          style: TextStyle(fontFamily: 'Kanit', 
-            fontSize: 18,
+          style: TextStyle(
+            fontFamily: 'Kanit',
+            fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: _textColor,
+            color: AnalysisColors.textPrimary,
           ),
         ),
-        const SizedBox(height: 16),
-        _buildInfoCard(
-          icon: Icons.security,
-          title: 'การรักษาความปลอดภัย',
-          description: 'ไฟล์ของคุณจะถูกเข้ารหัสและจัดเก็บอย่างปลอดภัย',
-          color: Colors.green,
-        ),
-        const SizedBox(height: 12),
-        _buildInfoCard(
-          icon: Icons.speed,
-          title: 'การวิเคราะห์รวดเร็ว',
-          description: 'ผลการวิเคราะห์จะพร้อมภายใน 2-5 นาที',
-          color: _cyanColor,
-        ),
-        const SizedBox(height: 12),
-        _buildInfoCard(
-          icon: Icons.analytics,
-          title: 'รายงานละเอียด',
-          description: 'รับรายงานการวิเคราะห์แบบละเอียดทุกประการ',
-          color: Colors.orange,
-        ),
-        const SizedBox(height: 12),
-        _buildInfoCard(
-          icon: Icons.lock,
-          title: 'ความเป็นส่วนตัว',
-          description:
-              'ไฟล์ Private จะมองเห็นได้เฉพาะคุณเท่านั้น (ค่าเริ่มต้น)',
-          color: Colors.purple,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        const SizedBox(height: 10),
+        for (final item in items) ...[
+          AnalysisCard(
+            padding: const EdgeInsets.all(13),
+            child: Row(
               children: [
-                Text(
-                  title,
-                  style: TextStyle(fontFamily: 'Kanit', 
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _textColor,
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                    color: item.$4.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(9),
                   ),
+                  child: Icon(item.$1, color: item.$4, size: 20),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(fontFamily: 'Kanit', 
-                    fontSize: 12,
-                    color: _hintColor,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.$2,
+                        style: const TextStyle(
+                          fontFamily: 'Kanit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AnalysisColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.$3,
+                        style: const TextStyle(
+                          fontFamily: 'Kanit',
+                          fontSize: 11.5,
+                          color: AnalysisColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 8),
         ],
-      ),
+      ],
     );
   }
 }

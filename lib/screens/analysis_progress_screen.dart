@@ -5,15 +5,10 @@ import 'package:get/get.dart';
 
 import '../models/analysis.dart';
 import '../services/analysis_service.dart';
-import '../theme/app_theme.dart';
+import '../widgets/analysis_components.dart';
 
-/// ติดตามความคืบหน้าการวิเคราะห์
-///
-/// poll สถานะจาก backend ทุก 2.5 วินาที (จังหวะเดียวกับฝั่งเว็บ) แล้วพาไปหน้า
-/// ผลลัพธ์เมื่อสถานะเป็น success — ระหว่างที่ยังไม่เสร็จจะแสดง stage และสถานะ
-/// ของเครื่องมือแต่ละตัวจาก `progress.tools`
 class AnalysisProgressScreen extends StatefulWidget {
-  const AnalysisProgressScreen({Key? key}) : super(key: key);
+  const AnalysisProgressScreen({super.key});
 
   @override
   State<AnalysisProgressScreen> createState() => _AnalysisProgressScreenState();
@@ -31,12 +26,17 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   TaskStatusResult? _last;
   String? _transientError;
 
-  Color get _cyan =>
-      Theme.of(context).extension<CustomColors>()?.cyanColor ??
-      const Color(0xff06b6d4);
-  Color get _hint =>
-      Theme.of(context).extension<CustomColors>()?.hintColor ??
-      const Color(0xff94a3b8);
+  static const Map<String, String> _stageLabels = {
+    'worker': 'กำลังเตรียมคิววิเคราะห์',
+    'virustotal': 'ตรวจสอบกับ VirusTotal',
+    'sandboxes': 'วิเคราะห์ใน sandbox (MobSF / CAPE)',
+    'cape': 'วิเคราะห์ด้วย CAPE',
+    'rampart_ai': 'วิเคราะห์ด้วยโมเดล AI',
+    'rampartai': 'วิเคราะห์ด้วยโมเดล AI',
+    'gemini': 'สรุปผลด้วย Gemini',
+    'complete': 'วิเคราะห์เสร็จสิ้น',
+    'failed': 'การวิเคราะห์ล้มเหลว',
+  };
 
   @override
   void initState() {
@@ -58,7 +58,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     _requestInFlight = false;
     if (!mounted) return;
 
-    // เครือข่ายสะดุด: คงสถานะล่าสุดไว้ ไม่หยุด polling และไม่ล้างผลที่ได้มาแล้ว
     if (!result.success && result.httpStatus == 0) {
       setState(() => _transientError = result.message);
       return;
@@ -94,39 +93,54 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     _timer = Timer.periodic(_pollInterval, (_) => _poll());
   }
 
-  static const Map<String, String> _toolLabels = {
-    'virustotal': 'VirusTotal',
-    'mobsf': 'MobSF',
-    'cape': 'CAPE',
-    'rampart_ai': 'RampartAI',
-    'gemini': 'Gemini',
-  };
+  ToolProgress? _progressFor(String tool) => _last?.progress?.tools[tool];
 
-  static const Map<String, String> _stageLabels = {
-    'worker': 'กำลังเตรียมคิววิเคราะห์',
-    'virustotal': 'ตรวจสอบกับ VirusTotal',
-    'sandboxes': 'วิเคราะห์ใน sandbox (MobSF / CAPE)',
-    'rampart_ai': 'วิเคราะห์ด้วยโมเดล AI',
-    'gemini': 'สรุปผลด้วย Gemini',
-    'complete': 'วิเคราะห์เสร็จสิ้น',
-    'failed': 'การวิเคราะห์ล้มเหลว',
-  };
+  ToolRunStatus _statusFor(String tool) {
+    final progress = _progressFor(tool);
+    if (progress != null) return progress.status;
 
-  static const Map<ToolRunStatus, String> _toolStatusLabels = {
-    ToolRunStatus.waiting: 'รอดำเนินการ',
-    ToolRunStatus.running: 'กำลังทำงาน',
-    ToolRunStatus.completed: 'สำเร็จ',
-    ToolRunStatus.failed: 'ล้มเหลว',
-    ToolRunStatus.skipped: 'ข้าม',
-  };
+    final stage = _last?.progress?.stage?.toLowerCase();
+    if (stage == 'complete') return ToolRunStatus.completed;
+    if (stage == 'failed') return ToolRunStatus.failed;
+    if (stage == tool ||
+        (stage == 'sandboxes' && (tool == 'mobsf' || tool == 'cape'))) {
+      return ToolRunStatus.running;
+    }
+    if (stage == 'rampart_ai' && tool == 'rampart_ai') {
+      return ToolRunStatus.running;
+    }
+    if (stage == 'rampartai' && tool == 'rampart_ai') {
+      return ToolRunStatus.running;
+    }
+    if (stage == 'gemini' && tool == 'gemini') {
+      return ToolRunStatus.running;
+    }
+    return ToolRunStatus.waiting;
+  }
 
-  static const Map<ToolRunStatus, Color> _toolStatusColors = {
-    ToolRunStatus.waiting: Color(0xff94a3b8),
-    ToolRunStatus.running: Color(0xff06b6d4),
-    ToolRunStatus.completed: Color(0xff22c55e),
-    ToolRunStatus.failed: Color(0xffef4444),
-    ToolRunStatus.skipped: Color(0xfff59e0b),
-  };
+  String? _noteFor(String tool) {
+    final note = _last?.toolNotes[tool];
+    if (note != null && note.isNotEmpty) return note;
+    final message = _last?.progress?.message;
+    if (message != null &&
+        message.isNotEmpty &&
+        _last?.progress?.error == null) {
+      return tool == 'gemini' ? message : null;
+    }
+    return null;
+  }
+
+  String _stageText() {
+    final stage = _last?.progress?.stage;
+    if (stage == null || stage.isEmpty) return 'กำลังเริ่มวิเคราะห์...';
+    return _stageLabels[stage] ?? stage;
+  }
+
+  ToolRunStatus _pageStatus() {
+    if (_finished && (_last?.isFailed ?? false)) return ToolRunStatus.failed;
+    if (_finished && (_last?.isNotFound ?? false)) return ToolRunStatus.failed;
+    return ToolRunStatus.running;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +150,11 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0f172a), Color(0xFF1e293b)],
+            colors: [
+              AnalysisColors.background,
+              AnalysisColors.surface,
+              Color(0xFF111827),
+            ],
           ),
         ),
         child: SafeArea(
@@ -145,14 +163,18 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
               _buildHeader(),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
-                    _buildStatusCard(),
+                    _buildPipelineHeader(),
                     const SizedBox(height: 16),
-                    _buildToolCard(),
+                    _buildPipeline(),
                     if (_last?.toolNotes.isNotEmpty ?? false) ...[
                       const SizedBox(height: 16),
                       _buildNotesCard(),
+                    ],
+                    if (_transientError != null) ...[
+                      const SizedBox(height: 12),
+                      _buildErrorCard(),
                     ],
                   ],
                 ),
@@ -166,17 +188,18 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 20, 8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
       child: Row(
         children: [
           IconButton(
+            tooltip: 'ย้อนกลับ',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Get.back(),
           ),
           const SizedBox(width: 4),
           const Expanded(
             child: Text(
-              'กำลังวิเคราะห์ไฟล์',
+              'Live Analysis',
               style: TextStyle(
                 fontFamily: 'Kanit',
                 fontSize: 20,
@@ -185,224 +208,327 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
               ),
             ),
           ),
+          AnalysisStatusBadge(
+            status: _pageStatus(),
+            label: _finished ? 'จบการวิเคราะห์' : 'กำลังวิเคราะห์',
+            compact: true,
+          ),
         ],
       ),
     );
   }
 
-  Widget _card({required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: child,
+  Widget _buildPipelineHeader() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Expanded(
+          child: Text(
+            'Analysis Pipeline',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: Text(
+            _last?.progress?.message ?? _stageText(),
+            textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 12,
+              color: AnalysisColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildStatusCard() {
-    final task = _last;
-    final stage = task?.progress?.stage;
-    final stageText = stage == null
-        ? 'กำลังเริ่มวิเคราะห์...'
-        : (_stageLabels[stage] ?? stage);
-    final message = task?.progress?.message ?? task?.message;
+  Widget _buildPipeline() {
+    final vtStatus = _statusFor('virustotal');
+    final mobsfStatus = _statusFor('mobsf');
+    final capeStatus = _statusFor('cape');
+    final aiStatus = _statusFor('rampart_ai');
+    final geminiStatus = _statusFor('gemini');
+    final engineStatus = deriveAnalysisStageStatus([
+      mobsfStatus,
+      capeStatus,
+      aiStatus,
+    ]);
 
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildConnector([vtStatus, engineStatus, geminiStatus]),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
             children: [
-              if (!_finished)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xff06b6d4),
-                  ),
+              _buildStage(
+                number: 1,
+                title: 'Stage 1 — Initial Triage',
+                status: vtStatus,
+                child: _buildToolCard('virustotal'),
+              ),
+              const SizedBox(height: 12),
+              _buildStage(
+                number: 2,
+                title: 'Stage 2 — Multi-Engine Analysis',
+                status: engineStatus,
+                child: Column(
+                  children: [
+                    const Text(
+                      'Parallel Processing',
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 11,
+                        color: AnalysisColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildToolCard('mobsf'),
+                    const SizedBox(height: 8),
+                    _buildToolCard('cape'),
+                    const SizedBox(height: 8),
+                    _buildToolCard('rampart_ai'),
+                  ],
                 ),
-              if (!_finished) const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  stageText,
-                  style: const TextStyle(
-                    fontFamily: 'Kanit',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
+              ),
+              const SizedBox(height: 12),
+              _buildStage(
+                number: 3,
+                title: 'Stage 3 — AI Recommendation',
+                status: geminiStatus,
+                inputLabel: _geminiInputLabel(),
+                child: _buildToolCard('gemini'),
               ),
             ],
           ),
-          if (message != null && message.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: TextStyle(fontFamily: 'Kanit', fontSize: 13, color: _hint),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildConnector(List<ToolRunStatus> statuses) {
+    return Column(
+      children: [
+        for (var index = 0; index < statuses.length; index++) ...[
+          _buildConnectorNode(statuses[index], index + 1),
+          if (index < statuses.length - 1)
+            Container(
+              width: 2,
+              height: 126,
+              color: AnalysisColors.status(
+                statuses[index + 1],
+              ).withValues(alpha: 0.3),
             ),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            'task: $_taskId',
-            style: TextStyle(fontFamily: 'Kanit', fontSize: 11, color: _hint),
-          ),
-          if (_last?.progress?.error != null &&
-              _last!.progress!.error!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              _last!.progress!.error!,
-              style: const TextStyle(
-                fontFamily: 'Kanit',
-                fontSize: 13,
-                color: Color(0xffef4444),
-              ),
-            ),
-          ],
-          if (_transientError != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.wifi_off, size: 16, color: Color(0xfff59e0b)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _transientError!,
-                    style: const TextStyle(
-                      fontFamily: 'Kanit',
-                      fontSize: 12,
-                      color: Color(0xfff59e0b),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (_last?.isNotFound ?? false) ...[
-            const SizedBox(height: 12),
-            Text(
-              'ไม่พบงานวิเคราะห์นี้',
-              style: TextStyle(fontFamily: 'Kanit', fontSize: 14, color: _hint),
-            ),
-          ],
-          if (_last?.isFailed ?? false) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _restartPolling,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text(
-                  'ลองใหม่',
-                  style: TextStyle(fontFamily: 'Kanit'),
-                ),
-                style: OutlinedButton.styleFrom(foregroundColor: _cyan),
-              ),
-            ),
-          ],
         ],
+      ],
+    );
+  }
+
+  Widget _buildConnectorNode(ToolRunStatus status, int number) {
+    final color = AnalysisColors.status(status);
+    return Container(
+      width: 30,
+      height: 30,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AnalysisColors.surface,
+        border: Border.all(color: color, width: 2),
+      ),
+      child: Text(
+        '$number',
+        style: TextStyle(
+          fontFamily: 'Kanit',
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
 
-  Widget _buildToolCard() {
-    final tools = _last?.progress?.tools ?? const <String, ToolProgress>{};
+  Widget _buildStage({
+    required int number,
+    required String title,
+    required ToolRunStatus status,
+    required Widget child,
+    String? inputLabel,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontFamily: 'Kanit',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                  color: AnalysisColors.textMuted,
+                ),
+              ),
+            ),
+            if (inputLabel != null)
+              Text(
+                inputLabel,
+                style: const TextStyle(
+                  fontFamily: 'Kanit',
+                  fontSize: 10,
+                  color: AnalysisColors.textMuted,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        AnalysisCard(
+          status: status,
+          padding: const EdgeInsets.all(12),
+          child: child,
+        ),
+      ],
+    );
+  }
 
-    // ระหว่างที่ยังไม่มี progress ให้แสดงเครื่องมือทั้งหมดในสถานะรอ
-    final names = tools.isNotEmpty ? tools.keys.toList() : _toolLabels.keys.toList();
+  Widget _buildToolCard(String tool) {
+    final status = _statusFor(tool);
+    final progress = _progressFor(tool);
+    final score = progress?.score;
+    final message = _noteFor(tool);
+    final title = switch (tool) {
+      'virustotal' => 'VirusTotal Scan',
+      'mobsf' => 'MobSF Static Analysis',
+      'cape' => 'CAPE Analysis',
+      'rampart_ai' => 'Machine Learning Detection',
+      'gemini' => 'Gemini AI Analysis',
+      _ => analysisToolLabel(tool),
+    };
+    final subtitle = switch (tool) {
+      'virustotal' => 'Multi-engine antivirus detection',
+      'mobsf' => 'Mobile Security Framework',
+      'cape' => 'Automated malware sandbox',
+      'rampart_ai' => 'ML-based prediction model',
+      'gemini' => 'AI-powered security recommendation',
+      _ => analysisToolLabel(tool),
+    };
 
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return AnalysisToolCard(
+      tool: tool,
+      title: title,
+      subtitle: subtitle,
+      status: status,
+      message: message,
+      child: _buildToolBody(tool, status, score),
+    );
+  }
+
+  Widget _buildToolBody(String tool, ToolRunStatus status, num? score) {
+    if (status == ToolRunStatus.completed) {
+      final value = score == null ? '-' : score.toStringAsFixed(0);
+      return Row(
         children: [
           const Text(
-            'เครื่องมือวิเคราะห์',
+            'คะแนน',
             style: TextStyle(
               fontFamily: 'Kanit',
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+              fontSize: 11,
+              color: AnalysisColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 12),
-          for (final name in names) _buildToolRow(name, tools[name]),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: AnalysisColors.textPrimary,
+            ),
+          ),
         ],
+      );
+    }
+
+    final text = switch (status) {
+      ToolRunStatus.running => 'กำลังประมวลผล...',
+      ToolRunStatus.failed => 'วิเคราะห์ไม่สำเร็จ',
+      ToolRunStatus.skipped => 'ข้ามการวิเคราะห์',
+      _ => 'รอเริ่มการวิเคราะห์',
+    };
+    return Text(
+      text,
+      style: TextStyle(
+        fontFamily: 'Kanit',
+        fontSize: 12,
+        color: AnalysisColors.status(status),
       ),
     );
   }
 
-  Widget _buildToolRow(String name, ToolProgress? progress) {
-    final status = progress?.status ?? ToolRunStatus.waiting;
-    final color = _toolStatusColors[status] ?? _hint;
-    final score = progress?.score;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              _toolLabels[name] ?? name,
-              style: const TextStyle(
-                fontFamily: 'Kanit',
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          if (score != null) ...[
-            Text(
-              '${score is int ? score : score.toStringAsFixed(1)}',
-              style: TextStyle(fontFamily: 'Kanit', fontSize: 13, color: _hint),
-            ),
-            const SizedBox(width: 10),
-          ],
-          Text(
-            _toolStatusLabels[status] ?? '',
-            style: TextStyle(fontFamily: 'Kanit', fontSize: 13, color: color),
-          ),
-        ],
-      ),
-    );
+  String _geminiInputLabel() {
+    final inputs = <String>[];
+    if (_statusFor('mobsf') == ToolRunStatus.completed) inputs.add('MobSF');
+    if (_statusFor('cape') == ToolRunStatus.completed) inputs.add('CAPE');
+    return 'Input: ${inputs.isEmpty ? 'None' : inputs.join(' + ')}';
   }
 
   Widget _buildNotesCard() {
-    return _card(
+    return AnalysisCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'หมายเหตุจากระบบ',
-            style: TextStyle(
-              fontFamily: 'Kanit',
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
+          const AnalysisSectionTitle('Tool Notes'),
           const SizedBox(height: 10),
           for (final entry in _last!.toolNotes.entries)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Text(
-                '${_toolLabels[entry.key] ?? entry.key}: ${entry.value}',
-                style: TextStyle(
+                '${analysisToolLabel(entry.key)}: ${entry.value}',
+                style: const TextStyle(
                   fontFamily: 'Kanit',
-                  fontSize: 13,
-                  color: _hint,
+                  fontSize: 12,
+                  color: AnalysisColors.textSecondary,
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorCard() {
+    return AnalysisCard(
+      status: ToolRunStatus.failed,
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off, size: 18, color: AnalysisColors.running),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _transientError!,
+              style: const TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 12,
+                color: AnalysisColors.running,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: _restartPolling,
+            child: const Text('ลองใหม่', style: TextStyle(fontFamily: 'Kanit')),
+          ),
         ],
       ),
     );

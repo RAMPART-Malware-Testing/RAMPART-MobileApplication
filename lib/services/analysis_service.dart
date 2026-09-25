@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/core/config.dart';
@@ -36,6 +39,24 @@ class AnalysisService {
 
   /// backend จำกัดไฟล์อัปโหลดไว้ 1GB
   static const int maxUploadBytes = 1024 * 1024 * 1024;
+
+  /// คำนวณ SHA-256 บน isolate แยก ไม่ block UI isolate และไม่โหลดทั้งไฟล์เข้าหน่วยความจำ
+  static Future<String> computeFileSha256(File file) {
+    final path = file.path;
+    return Isolate.run(() async {
+      final completer = Completer<String>();
+      final input = crypto.sha256.startChunkedConversion(
+        _DigestCollector((digest) {
+          if (!completer.isCompleted) completer.complete(digest.toString());
+        }),
+      );
+      await for (final chunk in File(path).openRead()) {
+        input.add(chunk);
+      }
+      input.close();
+      return completer.future;
+    });
+  }
 
   Future<String?> _accessToken() async {
     final token = await _storage.read(key: 'session_token');
@@ -112,7 +133,52 @@ class AnalysisService {
     }
   }
 
+  /// ตรวจว่าไฟล์นี้เคยถูกวิเคราะห์ไว้แล้วหรือยัง ก่อนส่งไบต์ใด ๆ ขึ้นเซิร์ฟเวอร์
+  ///
+  /// คืน null เมื่อ (ก) ยังไม่เคยวิเคราะห์ (cache miss) (ข) คำนวณ hash ไม่ได้
+  /// หรือ (ค) endpoint ตอบกลับผิดพลาด — ทุกกรณีผู้เรียกต้องออกอัปโหลดตามปกติ
+  Future<UploadResult?> findExistingAnalysis({
+    required File file,
+    required String fileName,
+    required int fileSize,
+    bool privacy = true,
+  }) async {
+    final token = await _accessToken();
+    if (token == null) return null;
+
+    try {
+      final sha256 = await computeFileSha256(file);
+      final res = await _http.post(
+        '/api/analy/v1/check-hash',
+        data: {
+          'token': token,
+          'sha256': sha256,
+          'file_name': fileName,
+          'file_size': fileSize,
+          'privacy': privacy,
+        },
+        options: Options(receiveTimeout: const Duration(minutes: 2)),
+      );
+
+      final data = res.data;
+      if (data is! Map) return null;
+      final result = UploadResult.fromJson(Map<String, dynamic>.from(data));
+      if (!result.success) return null;
+
+      // found = false ครอบคลุมทั้ง cache miss และสถานะ dispatching
+      // (ซึ่ง backend แนะนำให้อัปโหลดต่อ) — ทั้งคู่ต้องส่งไฟล์จริง
+      if (result.found != true) return null;
+      if (result.taskId == null || result.taskId!.isEmpty) return null;
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// อัปโหลดไฟล์เพื่อเริ่มวิเคราะห์
+  ///
+  /// ก่อนอัปโหลดจะเช็ค hash กับ /check-hash ก่อน ถ้าไฟล์ซ้ำกับงานที่เคย
+  /// วิเคราะห์ไว้ เซิร์ฟเวอร์จะคืน task เดิมกลับมา ไม่สร้างงานใหม่
   ///
   /// [onProgress] รายงานความคืบหน้าการส่งจริงเป็น byte (sent, total)
   Future<UploadResult> uploadFile({
@@ -133,6 +199,14 @@ class AnalysisService {
       if (fileSize > maxUploadBytes) {
         return UploadResult.failure('ไฟล์ใหญ่เกิน 1GB', status: 413);
       }
+
+      final existing = await findExistingAnalysis(
+        file: file,
+        fileName: fileName,
+        fileSize: fileSize,
+        privacy: privacy,
+      );
+      if (existing != null) return existing;
 
       final tokenResult = await generateUploadToken();
       if (!tokenResult.success || tokenResult.uploadToken == null) {
@@ -161,7 +235,8 @@ class AnalysisService {
       final data = res.data;
       if (data is Map) {
         final result = UploadResult.fromJson(Map<String, dynamic>.from(data));
-        if (result.success && (result.taskId == null || result.taskId!.isEmpty)) {
+        if (result.success &&
+            (result.taskId == null || result.taskId!.isEmpty)) {
           return UploadResult.failure('เซิร์ฟเวอร์ไม่ส่ง task_id กลับมา');
         }
         return result;
@@ -268,6 +343,8 @@ class AnalysisService {
     String? s,
     String? status,
     String? fileType,
+    String? sortField,
+    int sortDirection = -1,
   }) async {
     final token = await _accessToken();
     if (token == null) {
@@ -282,6 +359,9 @@ class AnalysisService {
     if (s != null && s.isNotEmpty) body['s'] = s;
     if (status != null && status.isNotEmpty) body['status'] = status;
     if (fileType != null && fileType.isNotEmpty) body['file_type'] = fileType;
+    if (sortField != null && sortField.isNotEmpty) {
+      body[sortField] = sortDirection >= 0 ? 1 : -1;
+    }
 
     try {
       final res = await _http.post('/api/analy/v1/history', data: body);
@@ -344,4 +424,19 @@ class AnalysisService {
     if (token == null) return base;
     return '$base?token=${Uri.encodeQueryComponent(token)}';
   }
+}
+
+/// รับ digest ที่คำนวณเสร็จแล้ว (เรียกครั้งเดียวตอนปิด sink)
+class _DigestCollector implements Sink<crypto.Digest> {
+  _DigestCollector(this.onDigest);
+
+  final void Function(crypto.Digest digest) onDigest;
+
+  @override
+  void add(crypto.Digest data) {
+    onDigest(data);
+  }
+
+  @override
+  void close() {}
 }
