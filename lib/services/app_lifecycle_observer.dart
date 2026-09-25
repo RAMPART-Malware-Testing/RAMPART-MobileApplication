@@ -32,8 +32,10 @@ class _AppLifecycleObserverState extends State<AppLifecycleObserver>
     } catch (_) {
       return;
     }
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+    // ล็อกเฉพาะตอนแอปถูกซ่อนจริง (paused) — ไม่ล็อกตอน inactive เพราะเกิดบ่อย
+    // เช่น มี dialog หรือ permission เด้งทับ หรือตอนกำลังเปิด Activity อื่น
+    // ซึ่งทำให้แอปล็อกกลางคันโดยที่ผู้ใช้ไม่ได้ออกจากแอป
+    if (state == AppLifecycleState.paused) {
       ps.evaluateLockOnBackground();
     } else if (state == AppLifecycleState.resumed) {
       ps.evaluateUnlockOnForeground();

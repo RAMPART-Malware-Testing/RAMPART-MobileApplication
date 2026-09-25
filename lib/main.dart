@@ -9,6 +9,8 @@ import 'package:rampart/screens/register_screen.dart';
 import 'package:rampart/screens/confirm_screen.dart';
 import 'package:rampart/screens/forgot_password_screen.dart';
 import 'package:rampart/screens/main_screen.dart';
+import 'package:rampart/screens/analysis_progress_screen.dart';
+import 'package:rampart/screens/analysis_result_screen.dart';
 import 'package:rampart/services/app_lifecycle_observer.dart';
 import 'package:rampart/services/pin_service.dart';
 import 'package:rampart/theme/app_theme.dart';
@@ -74,6 +76,16 @@ class MyApp extends StatelessWidget {
         GetPage(
           name: '/home',
           page: () => const MainScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/analysis-progress',
+          page: () => const AnalysisProgressScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/analysis-result',
+          page: () => const AnalysisResultScreen(),
           transition: Transition.fadeIn,
         ),
       ],

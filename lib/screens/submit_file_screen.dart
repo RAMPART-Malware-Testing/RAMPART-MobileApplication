@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:get/get.dart';
 import '../theme/app_theme.dart';
 import '../models/file_upload.dart';
-import '../services/file_upload_service.dart';
+import '../services/analysis_service.dart';
+import '../services/pin_service.dart';
 
 class SubmitFileScreen extends StatefulWidget {
   const SubmitFileScreen({Key? key}) : super(key: key);
@@ -14,7 +16,7 @@ class SubmitFileScreen extends StatefulWidget {
 }
 
 class _SubmitFileScreenState extends State<SubmitFileScreen> {
-  final FileUploadService _uploadService = FileUploadService();
+  final AnalysisService _analysisService = AnalysisService();
 
   // File state
   File? _selectedFile;
@@ -49,11 +51,20 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
 
   Future<void> _pickFile() async {
     try {
+      // ตัวเลือกไฟล์เป็น Activity ภายนอก ทำให้แอปถูกมองว่าไปอยู่เบื้องหลัง
+      // ต้องยกเว้นการล็อก PIN ชั่วคราว ไม่งั้นกลับมาแล้วจะโดนเด้งไปหน้า PIN
+      // และไฟล์ที่เลือกไว้หายไป
+      if (Get.isRegistered<PINService>()) {
+        Get.find<PINService>().suppressLockBriefly();
+      }
+
       // เปิด file picker
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
       );
+
+      if (!mounted) return;
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
@@ -61,11 +72,10 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
         final fileSize = result.files.single.size;
         final extension = result.files.single.extension;
 
-        // ตรวจสอบขนาดไฟล์ (สูงสุด 100MB)
-        const maxSize = 100 * 1024 * 1024; // 100MB
-        if (fileSize > maxSize) {
+        // ตรวจสอบขนาดไฟล์ (backend จำกัด 1GB — ตรงกับ AnalysisService.maxUploadBytes)
+        if (fileSize > AnalysisService.maxUploadBytes) {
           setState(() {
-            _error = 'ขนาดไฟล์เกิน 100MB กรุณาเลือกไฟล์ที่มีขนาดเล็กกว่า';
+            _error = 'ขนาดไฟล์เกิน 1GB กรุณาเลือกไฟล์ที่มีขนาดเล็กกว่า';
           });
           return;
         }
@@ -104,6 +114,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
         }
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'เกิดข้อผิดพลาดในการเลือกไฟล์: $e';
       });
@@ -112,27 +123,19 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
 
   Future<void> _uploadFile() async {
     if (_selectedFile == null || _fileInfo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.warning, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'กรุณาเลือกไฟล์ก่อนอัปโหลด',
-                  style: TextStyle(fontFamily: 'Kanit', ),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: Colors.orange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
+      // ยังไม่ได้เลือกไฟล์ — เปิดตัวเลือกไฟล์ก่อน แล้วอัปโหลดต่อทันทีเมื่อเลือกสำเร็จ
+      await _pickFile();
+      if (!mounted) return;
+      // ผู้ใช้กดยกเลิกในตัวเลือกไฟล์
+      if (_selectedFile == null || _fileInfo == null) return;
     }
 
+    await _startUpload();
+  }
+
+  /// อัปโหลดไฟล์ที่เลือกไว้จริง — แยกออกมาเพื่อให้ทั้งปุ่มอัปโหลด
+  /// และขั้นตอนเลือกไฟล์อัตโนมัติเรียกใช้เส้นทางเดียวกัน
+  Future<void> _startUpload() async {
     setState(() {
       _isUploading = true;
       _uploadProgress = 0.0;
@@ -140,26 +143,31 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
     });
 
     try {
-      // TODO: ดึง token จาก storage หรือ state management
-      const token = 'your_auth_token_here';
-
-      // Simulate upload progress (ในการใช้งานจริงจะได้รับจาก API)
-      _simulateProgress();
-
-      await _uploadService.uploadFile(
+      final result = await _analysisService.uploadFile(
         file: _selectedFile!,
         fileName: _fileInfo!.name,
-        isPublic: _isPublic,
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-        token: token,
-        onProgress: (progress) {
+        // API ใช้ privacy โดย true = ส่วนตัว ซึ่งกลับกับ _isPublic ของหน้านี้
+        privacy: !_isPublic,
+        onProgress: (sent, total) {
+          if (!mounted || total <= 0) return;
           setState(() {
-            _uploadProgress = progress;
+            _uploadProgress = sent / total;
           });
         },
       );
+
+      if (!mounted) return;
+
+      if (!result.success || result.taskId == null) {
+        setState(() {
+          _isUploading = false;
+          _error = result.message;
+        });
+        _showErrorSnack(
+          result.message.isEmpty ? 'อัปโหลดไม่สำเร็จ' : result.message,
+        );
+        return;
+      }
 
       setState(() {
         _isUploading = false;
@@ -199,70 +207,38 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
         );
       }
 
-      // Reset form
+      // Reset form แล้วพาไปหน้าติดตามความคืบหน้าการวิเคราะห์
       await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
       _resetForm();
+      Get.toNamed('/analysis-progress', arguments: result.taskId);
     } catch (e) {
       setState(() {
         _isUploading = false;
         _error = e.toString().replaceAll('Exception: ', '');
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.error, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _error ?? 'เกิดข้อผิดพลาด',
-                    style: TextStyle(fontFamily: 'Kanit', ),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
+      _showErrorSnack(_error ?? 'เกิดข้อผิดพลาด');
     }
   }
 
-  void _simulateProgress() {
-    // Simulate progress for better UX
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_isUploading && mounted) {
-        setState(() {
-          if (_uploadProgress < 0.3) {
-            _uploadProgress = 0.3;
-          }
-        });
-      }
-    });
-
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_isUploading && mounted) {
-        setState(() {
-          if (_uploadProgress < 0.6) {
-            _uploadProgress = 0.6;
-          }
-        });
-      }
-    });
-
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      if (_isUploading && mounted) {
-        setState(() {
-          if (_uploadProgress < 0.9) {
-            _uploadProgress = 0.9;
-          }
-        });
-      }
-    });
+  void _showErrorSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(message, style: const TextStyle(fontFamily: 'Kanit')),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   void _resetForm() {
@@ -416,7 +392,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
                   Text(
                     _fileInfo != null
                         ? 'ขนาด: ${_fileInfo!.displaySize}'
-                        : 'รองรับไฟล์ทุกประเภท (ขนาดสูงสุด 100MB)',
+                        : 'รองรับไฟล์ทุกประเภท (ขนาดสูงสุด 1GB)',
                     style: TextStyle(fontFamily: 'Kanit', 
                       fontSize: 12,
                       color: _hintColor,

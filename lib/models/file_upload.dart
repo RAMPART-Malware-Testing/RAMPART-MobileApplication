@@ -1,74 +1,7 @@
-import 'dart:io';
-
-/// Model สำหรับ Upload File Request
-class FileUploadRequest {
-  final File file;
-  final String fileName;
-  final bool isPublic;
-  final String? description;
-
-  FileUploadRequest({
-    required this.file,
-    required this.fileName,
-    this.isPublic = false, // Default เป็น private
-    this.description,
-  });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'file_name': fileName,
-      'is_public': isPublic,
-      if (description != null) 'description': description,
-    };
-  }
-}
-
-/// Model สำหรับ Upload File Response
-class FileUploadResponse {
-  final String fileId;
-  final String fileName;
-  final String status;
-  final bool isPublic;
-  final String uploadedAt;
-  final int fileSize;
-  final String? message;
-
-  FileUploadResponse({
-    required this.fileId,
-    required this.fileName,
-    required this.status,
-    required this.isPublic,
-    required this.uploadedAt,
-    required this.fileSize,
-    this.message,
-  });
-
-  factory FileUploadResponse.fromJson(Map<String, dynamic> json) {
-    return FileUploadResponse(
-      fileId: json['file_id'] ?? '',
-      fileName: json['file_name'] ?? '',
-      status: json['status'] ?? 'pending',
-      isPublic: json['is_public'] ?? false,
-      uploadedAt: json['uploaded_at'] ?? '',
-      fileSize: json['file_size'] ?? 0,
-      message: json['message'],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'file_id': fileId,
-      'file_name': fileName,
-      'status': status,
-      'is_public': isPublic,
-      'uploaded_at': uploadedAt,
-      'file_size': fileSize,
-      if (message != null) 'message': message,
-    };
-  }
-}
-
-/// Model สำหรับแสดงข้อมูลไฟล์ที่เลือก
+/// ข้อมูลไฟล์ที่ผู้ใช้เลือกไว้แสดงบนหน้าจอ (ยังไม่อัปโหลด)
+///
+/// ส่วน request/response ของการอัปโหลดอยู่ใน `lib/models/analysis.dart`
+/// เพราะยิงตรงไปที่ API วิเคราะห์ของ RAMPART
 class SelectedFileInfo {
   final String name;
   final String path;
