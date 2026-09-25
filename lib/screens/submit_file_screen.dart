@@ -105,13 +105,6 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
       final completedReuse = result.isCompletedReuse;
       final gapFilled = result.isGapFilled;
 
-      debugPrint(
-        'RAMPART_DEDUP reused=$reused completed=$completedReuse '
-        'gapFilled=$gapFilled duplicate=${result.isDuplicate} '
-        'status=${result.status} queueState=${result.queueState} '
-        'found=${result.found} taskId=${result.taskId}',
-      );
-
       if (reused && completedReuse) {
         _showMessage(
           'พบไฟล์นี้ในระบบแล้ว กำลังเปิดผลวิเคราะห์เดิม',
