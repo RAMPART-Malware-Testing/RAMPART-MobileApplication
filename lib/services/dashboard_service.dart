@@ -43,14 +43,15 @@ class DashboardService {
   static const String _msgNetwork = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
   static const String _msgTimeout = 'เซิร์ฟเวอร์ใช้เวลานานเกินกำหนด กรุณาลองใหม่อีกครั้ง';
 
-  /// จำนวนรายงานสาธารณะที่แสดงต่อหนึ่งหน้า — หน้า dashboard โชว์ 10 อันดับแรก
-  /// ส่วนหน้าถัดไปมาจากปุ่ม "ดูเพิ่มเติม" (backend จำกัด limit สูงสุด 100)
-  static const int publicReportLimit = 10;
+  /// จำนวนรายงานสาธารณะที่แสดงต่อหนึ่งหน้า — หน้า dashboard โชว์ 5 อันดับแรก
+  /// ส่วนที่เหลือดูต่อได้ที่หน้า "Public Reports" (backend จำกัด limit สูงสุด 100)
+  static const int publicReportLimit = 5;
 
-  /// จำนวนกิจกรรมล่าสุดที่แสดง — backend คืนสูงสุด 10 รายการตายตัว
+  /// จำนวนกิจกรรมล่าสุดที่แสดงบน dashboard — backend คืนสูงสุด 10 รายการตายตัว
   /// (endpoint `recent-activities` ไม่รับ page/limit) จึงไม่มี pagination
-  /// ฝั่งเซิร์ฟเวอร์ ปุ่ม "ดูเพิ่มเติม" ของส่วนนี้จึงพาไปแท็บ Reports แทน
-  static const int recentActivityLimit = 10;
+  /// ฝั่งเซิร์ฟเวอร์ แสดงแค่ 5 อันดับแรก ปุ่ม "ดูเพิ่มเติม" ของส่วนนี้จึงพา
+  /// ไปแท็บ Reports ซึ่งมีประวัติฉบับเต็มพร้อมแบ่งหน้า
+  static const int recentActivityLimit = 5;
 
   Future<String?> _accessToken() async {
     final token = await _storage.read(key: 'session_token');

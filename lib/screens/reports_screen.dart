@@ -24,15 +24,33 @@ class _ToolChip {
   final num? score;
 }
 
+/// ช่องใส่ตัวดึงประวัติ ใช้ในเทสต์แทนการยิงเครือข่าย — รูปแบบเดียวกับ
+/// `DashboardScreen.load` ที่ฉีดข้อมูลชุดเดียว
+typedef HistoryLoader =
+    Future<AnalysisHistoryPage> Function({
+      required int page,
+      required int limit,
+      required String s,
+      required String status,
+      required String fileType,
+      required String sortField,
+      required int sortDirection,
+      required bool force,
+    });
+
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({super.key});
+  const ReportsScreen({super.key, this.loadHistory});
+
+  final HistoryLoader? loadHistory;
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  static const int _pageSize = 10;
+  /// ดึงจากเซิร์ฟเวอร์ทีละ 5 รายการ — backend รับ page/limit จริง
+  /// (`schemas/analy.py`) การแบ่งหน้าเลยไม่ได้ทำในเครื่อง
+  static const int _pageSize = 5;
   static const List<_FilterOption> _statusFilters = [
     _FilterOption('', 'ทั้งหมด'),
     _FilterOption('success', 'สำเร็จ'),
@@ -123,6 +141,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadFirstPage(silent: true);
   }
 
+  /// ยิงหน้าที่ [page] ด้วยตัวกรองปัจจุบัน — เส้นทางเดียวทั้งเทสต์และตัวจริง
+  Future<AnalysisHistoryPage> _fetch(int page, {bool force = false}) {
+    final loader = widget.loadHistory;
+    if (loader != null) {
+      return loader(
+        page: page,
+        limit: _pageSize,
+        s: _search,
+        status: _selectedStatus,
+        fileType: _selectedFileType,
+        sortField: _sortField,
+        sortDirection: _sortDirection,
+        force: force,
+      );
+    }
+    return _service.getHistory(
+      page: page,
+      limit: _pageSize,
+      s: _search,
+      status: _selectedStatus,
+      fileType: _selectedFileType,
+      sortField: _sortField,
+      sortDirection: _sortDirection,
+      force: force,
+    );
+  }
+
   /// [force] = ผู้ใช้สั่งเอง (ดึงลง/ปุ่มลองใหม่) ข้ามแคช 4 วินาที
   /// [silent] = ไม่ล้างรายการเดิมถ้าดึงใหม่ไม่สำเร็จ
   Future<void> _loadFirstPage({bool force = false, bool silent = false}) async {
@@ -138,16 +183,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     });
 
-    final page = await _service.getHistory(
-      page: 1,
-      limit: _pageSize,
-      s: _search,
-      status: _selectedStatus,
-      fileType: _selectedFileType,
-      sortField: _sortField,
-      sortDirection: _sortDirection,
-      force: force,
-    );
+    final page = await _fetch(1, force: force);
     if (!mounted) return;
 
     // token ยังไม่หมดอายุแต่ผู้ใช้ไม่มีในฐานข้อมูลแล้ว — กดลองใหม่ไม่มีทางสำเร็จ
@@ -201,15 +237,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       return;
     }
     setState(() => _loadingMore = true);
-    final page = await _service.getHistory(
-      page: pagination.page + 1,
-      limit: _pageSize,
-      s: _search,
-      status: _selectedStatus,
-      fileType: _selectedFileType,
-      sortField: _sortField,
-      sortDirection: _sortDirection,
-    );
+    final page = await _fetch(pagination.page + 1);
     if (!mounted) return;
     setState(() {
       _loadingMore = false;
@@ -712,24 +740,83 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
       );
     }
+    final hasNext = _pagination?.hasNext ?? false;
+    // หางของรายการคือ แถวโหลดเพิ่ม/สปินเนอร์ (ถ้ามี) + บรรทัดนับ "แสดง X จาก Y"
+    // เดิมการแบ่งหน้าทำงานเงียบมาก ผู้ใช้มองไม่ออกว่ามีหน้าถัดไปหรือรายการหมดแล้ว
+    final tailCount = 1 + ((hasNext || _loadingMore) ? 1 : 0);
     return RefreshIndicator(
       onRefresh: () => _loadFirstPage(force: true),
       color: AnalysisColors.cyan,
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        itemCount: _items.length + (_loadingMore ? 1 : 0),
+        itemCount: _items.length + tailCount,
         itemBuilder: (context, index) {
-          if (index >= _items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Icon(Icons.hourglass_top, color: AnalysisColors.cyan),
-              ),
-            );
+          if (index < _items.length) return _buildReportCard(_items[index]);
+          if (index == _items.length) {
+            if (_loadingMore) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Icon(Icons.hourglass_top, color: AnalysisColors.cyan),
+                ),
+              );
+            }
+            if (hasNext) return _buildLoadMoreRow();
           }
-          return _buildReportCard(_items[index]);
+          return _buildPageFooter();
         },
+      ),
+    );
+  }
+
+  /// ปุ่มโหลดหน้าถัดไป — infinite scroll ยังทำงานอยู่เหมือนเดิม แต่ปุ่มนี้ทำให้
+  /// ผู้ใช้เห็นว่ายังมีรายการต่อ และกดเองได้โดยไม่ต้องเลื่อนให้สุดจอ
+  Widget _buildLoadMoreRow() {
+    final pagination = _pagination;
+    final next = (pagination?.page ?? 1) + 1;
+    final last = pagination?.totalPages ?? next;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 10),
+      child: Center(
+        child: OutlinedButton.icon(
+          key: const Key('reports-load-more'),
+          onPressed: _loadNextPage,
+          icon: const Icon(Icons.expand_more, size: 18),
+          label: Text('โหลดเพิ่มเติม (หน้า $next/$last)'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AnalysisColors.cyan,
+            side: BorderSide(
+              color: AnalysisColors.cyan.withValues(alpha: 0.5),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// บรรทัดสรุปว่าดูมาแล้วกี่รายการจากทั้งหมดกี่รายการ
+  Widget _buildPageFooter() {
+    final pagination = _pagination;
+    if (pagination == null) return const SizedBox.shrink();
+    final pageInfo = pagination.totalPages > 1
+        ? ' • หน้า ${pagination.page}/${pagination.totalPages}'
+        : '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Center(
+        child: Text(
+          'แสดง ${_items.length} จาก ${pagination.total} รายการ$pageInfo',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: 'Kanit',
+            fontSize: 11.5,
+            color: AnalysisColors.textMuted,
+          ),
+        ),
       ),
     );
   }

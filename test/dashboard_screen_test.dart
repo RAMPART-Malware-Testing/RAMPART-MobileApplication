@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
-import 'package:rampart/models/analysis.dart';
 import 'package:rampart/models/dashboard_stats.dart';
 import 'package:rampart/screens/dashboard_screen.dart';
 import 'package:rampart/services/tab_refresh_bus.dart';
@@ -221,66 +220,47 @@ void main() {
     expect(find.text('bank.apk'), findsOneWidget);
   });
 
-  testWidgets('ปุ่มดูเพิ่มเติมของไฟล์สาธารณะโหลดหน้าถัดไปต่อท้าย', (tester) async {
-    var requestedPage = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: DashboardScreen(
-          load: () async => DashboardBundle.fromResponses(
-            publicReports: paginatedBundleResponse(),
-          ),
-          loadMoreReports: (page) async {
-            requestedPage = page;
-            return PublicReportsPage(
-              items: [historyItem('trojan-sample.exe')],
-              hasMore: false,
-              total: 2,
-            );
-          },
-        ),
+  testWidgets('ไฟล์สาธารณะแสดงแค่หน้าละ 5 แล้วให้ดูต่อที่หน้า Public Reports', (
+    tester,
+  ) async {
+    await pumpDashboard(
+      tester,
+      DashboardBundle.fromResponses(
+        publicReports: fiveItemBundleResponse(),
       ),
     );
-    await tester.pumpAndSettle();
 
-    // หน้าแรกมี 1 รายการ + รู้ว่ายังมีหน้า 2 (has_next: true)
-    expect(find.text('bank.apk'), findsOneWidget);
-    expect(find.textContaining('ทั้งหมด 2 รายการ'), findsOneWidget);
+    for (var i = 0; i < 5; i++) {
+      expect(find.text('public-$i.apk'), findsOneWidget);
+    }
+    // รายการที่ 6 อยู่หน้าสอง — ต้องไม่ถูกยัดลง dashboard
+    expect(find.text('public-5.apk'), findsNothing);
+    expect(find.textContaining('ทั้งหมด 12 รายการ'), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('public-view-more')));
-    await tester.tap(find.byKey(const Key('public-view-more')));
-    await tester.pumpAndSettle();
-
-    expect(requestedPage, 2);
-    expect(find.text('bank.apk'), findsOneWidget);
-    expect(find.text('trojan-sample.exe'), findsOneWidget);
-    // หน้าใหม่บอกว่าหมดแล้ว (hasMore: false) — ปุ่มต้องหายไป
-    expect(find.byKey(const Key('public-view-more')), findsNothing);
+    final button = find.byKey(const Key('public-view-more'));
+    await tester.ensureVisible(button);
+    expect(button, findsOneWidget);
+    expect(find.text('ดูทั้งหมด'), findsOneWidget);
   });
 
-  testWidgets('กดดูเพิ่มเติมแล้วยิงไม่สำเร็จ ต้องคงรายการเดิมและขึ้น SnackBar', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: DashboardScreen(
-          load: () async => DashboardBundle.fromResponses(
-            publicReports: paginatedBundleResponse(),
-          ),
-          loadMoreReports: (page) async =>
-              const PublicReportsPage(error: 'เซิร์ฟเวอร์ใช้เวลานานเกินกำหนด'),
-        ),
+  testWidgets('กิจกรรมล่าสุดแสดงแค่ 5 รายการแรก', (tester) async {
+    await pumpDashboard(
+      tester,
+      DashboardBundle.fromResponses(
+        summary: summaryResponse(),
+        recentActivities: manyActivitiesResponse(),
       ),
     );
-    await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.byKey(const Key('public-view-more')));
-    await tester.tap(find.byKey(const Key('public-view-more')));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      expect(find.text('activity-$i.apk'), findsOneWidget);
+    }
+    expect(find.text('activity-5.apk'), findsNothing);
 
-    expect(find.text('เซิร์ฟเวอร์ใช้เวลานานเกินกำหนด'), findsOneWidget);
-    // รายการเดิมยังอยู่ครบ และปุ่มยังกดซ้ำได้เพราะยังมีหน้าถัดไป
-    expect(find.text('bank.apk'), findsOneWidget);
-    expect(find.byKey(const Key('public-view-more')), findsOneWidget);
+    // ยังมีกิจกรรมที่ไม่ได้แสดง ปุ่มพาไปแท็บ Reports ที่มีประวัติครบต้องอยู่
+    final button = find.byKey(const Key('activities-view-more'));
+    await tester.scrollUntilVisible(button, 300);
+    expect(button, findsOneWidget);
   });
 
   testWidgets('ปุ่มดูเพิ่มเติมของกิจกรรมล่าสุดพาไปแท็บรายงาน', (tester) async {
@@ -349,18 +329,48 @@ Map<String, dynamic> bundleResponse() => {
   'data': [historyItemJson()],
 };
 
-/// payload แบบที่ endpoint `dashboard/reports` คืนจริง — มี `pagination` ต่อท้าย
-Map<String, dynamic> paginatedBundleResponse({bool hasNext = true}) => {
+/// payload แบบที่ endpoint `dashboard/reports` คืนจริง — หน้าแรก 5 รายการ
+/// ของทั้งหมด 12 (backend จำกัด limit สูงสุด 100)
+Map<String, dynamic> fiveItemBundleResponse() => {
   'success': true,
-  'data': [historyItemJson()],
+  'data': [
+    for (var i = 0; i < 5; i++)
+      historyItemJson(fileName: 'public-$i.apk', taskId: 'task-$i'),
+  ],
   'pagination': {
     'page': 1,
-    'limit': 10,
-    'total': 2,
-    'total_pages': 2,
-    'has_next': hasNext,
+    'limit': 5,
+    'total': 12,
+    'total_pages': 3,
+    'has_next': true,
     'has_prev': false,
   },
+};
+
+/// summary ขั้นต่ำพอให้หน้า dashboard วาดส่วนกิจกรรมล่าสุดได้
+Map<String, dynamic> summaryResponse() => {
+  'success': true,
+  'data': {
+    'totalFiles': {'total': 3, 'success': 3, 'pending': 0, 'failed': 0},
+    'userFiles': {'total': 1, 'success': 1, 'pending': 0, 'failed': 0},
+    'totalUsers': 2,
+    'topMalwareTypes': {'daily': [], 'monthly': []},
+    'riskScores': <dynamic>[],
+  },
+};
+
+/// backend คืนกิจกรรมล่าสุดได้ถึง 10 รายการ แต่ dashboard โชว์แค่ 5
+Map<String, dynamic> manyActivitiesResponse() => {
+  'success': true,
+  'data': [
+    for (var i = 0; i < 8; i++)
+      {
+        'id': '$i',
+        'fileName': 'activity-$i.apk',
+        'status': 'success',
+        'timestamp': '2026-09-26 09:0$i',
+      },
+  ],
 };
 
 Map<String, dynamic> historyItemJson({
@@ -381,8 +391,3 @@ Map<String, dynamic> historyItemJson({
     'rampart_ai_score': {'malware_probability': 0.95},
   },
 };
-
-/// หน้าถัดไปจากปุ่ม "ดูเพิ่มเติม" — service แปลง response แล้วคืน [PublicReportsPage]
-AnalysisHistoryItem historyItem(String fileName) => AnalysisHistoryItem.fromJson(
-  historyItemJson(fileName: fileName, taskId: 'task-2'),
-);

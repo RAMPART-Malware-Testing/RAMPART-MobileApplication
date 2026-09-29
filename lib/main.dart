@@ -15,6 +15,7 @@ import 'package:rampart/screens/forgot_password_screen.dart';
 import 'package:rampart/screens/main_screen.dart';
 import 'package:rampart/screens/analysis_progress_screen.dart';
 import 'package:rampart/screens/analysis_result_screen.dart';
+import 'package:rampart/screens/public_reports_screen.dart';
 import 'package:rampart/screens/activity_history_screen.dart';
 import 'package:rampart/screens/banned_screen.dart';
 import 'package:rampart/screens/help_screen.dart';
@@ -178,6 +179,11 @@ class MyApp extends StatelessWidget {
         GetPage(
           name: '/analysis-result',
           page: () => const AnalysisResultScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/public-reports',
+          page: () => const PublicReportsScreen(),
           transition: Transition.fadeIn,
         ),
         GetPage(

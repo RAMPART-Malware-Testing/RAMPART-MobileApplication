@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../models/analysis.dart';
@@ -16,7 +17,6 @@ class DashboardScreen extends StatefulWidget {
     Key? key,
     this.load = defaultLoad,
     this.loadFresh = defaultLoadFresh,
-    this.loadMoreReports = defaultLoadMoreReports,
   }) : super(key: key);
 
   /// จุดเชื่อมสำหรับเทสต์ — ค่าเริ่มต้นยิงเซิร์ฟเวอร์จริง (ใช้แคช 4 วินาทีได้)
@@ -25,16 +25,10 @@ class DashboardScreen extends StatefulWidget {
   /// เหมือน [load] แต่ข้ามแคช — ใช้เมื่อผู้ใช้สั่งเอง (ดึงลงเพื่อรีเฟรช / ลองอีกครั้ง)
   final Future<DashboardBundle> Function() loadFresh;
 
-  /// จุดเชื่อมสำหรับเทสต์ — ดึงหน้าถัดไปของรายงานสาธารณะ (ปุ่ม "ดูเพิ่มเติม")
-  final Future<PublicReportsPage> Function(int page) loadMoreReports;
-
   static Future<DashboardBundle> defaultLoad() => dashboardService.loadDashboard();
 
   static Future<DashboardBundle> defaultLoadFresh() =>
       dashboardService.loadDashboard(force: true);
-
-  static Future<PublicReportsPage> defaultLoadMoreReports(int page) =>
-      dashboardService.loadPublicReportsPage(page: page);
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -46,16 +40,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _error = '';
   DashboardBundle? _bundle;
 
-  // ---------- สถานะ pagination ของ "ไฟล์สาธารณะ" ----------
+  // ---------- รายงานสาธารณะ ----------
   //
-  // หน้าแรก (10 รายการ) มาพร้อมกับ bundle ส่วนหน้าถัดไปกด "ดูเพิ่มเติม" แล้วค่อยยิง
-  // แล้ว append ต่อท้าย — ต่างจาก "กิจกรรมล่าสุด" ที่ backend ให้สูงสุด 10 ตายตัว
-  // จึงพาผู้ใช้ไปแท็บ Reports แทน
+  // dashboard โชว์แค่ 5 อันดับแรก ส่วนที่เหลือไปดูต่อที่หน้า "Public Reports"
+  // ซึ่งแบ่งหน้าเอง (ปุ่ม "ดูทั้งหมด") — เหมือนกิจกรรมล่าสุดที่พาไปแท็บ Reports
   List<AnalysisHistoryItem> _publicReports = const [];
-  bool _publicHasMore = false;
   int _publicTotal = 0;
-  bool _loadingMorePublic = false;
-  int _publicNextPage = 2;
 
   /// 'daily' หรือ 'monthly' — สองชุดนี้มาพร้อมกันใน response เดียวกัน
   /// การสลับจึงเป็นแค่ setState ไม่ต้องยิงซ้ำ
@@ -128,50 +118,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _bundle = bundle;
       _error = bundle.error;
 
-      // รีเฟรชทุกครั้งเริ่มนับหน้าใหม่ที่ 1 — รายการที่เคยกดโหลดเพิ่มจะถูกแทนที่
-      // ด้วยหน้าแรกล่าสุดจากเซิร์ฟเวอร์
+      // รีเฟรชทุกครั้งเริ่มนับหน้าใหม่ที่ 1 — รายการเดิมถูกแทนที่ด้วยหน้าแรก
+      // ล่าสุดจากเซิร์ฟเวอร์
       _publicReports = bundle.publicReports;
-      _publicHasMore = bundle.publicReportsHasMore;
       _publicTotal = bundle.publicReportsTotal;
-      _publicNextPage = 2;
-      _loadingMorePublic = false;
-    });
-  }
-
-  /// กด "ดูเพิ่มเติม" ของรายงานสาธารณะ — ดึงหน้าถัดไปแล้ว append ต่อท้าย
-  ///
-  /// เซิร์ฟเวอร์แคชผลลัพธ์ไว้ 5 วินาที การ append เลยต้องตัดรายการที่ซ้ำกับที่
-  /// แสดงอยู่ด้วย `task_id` กันรายการโผล่สองครั้ง ถ้ายิงไม่สำเร็จคงสถานะเดิมไว้
-  /// (กดซ้ำได้) แล้วแจ้งเหตุผลด้วย SnackBar แทนที่จะทำรายการเก่าหาย
-  Future<void> _loadMorePublicReports() async {
-    if (_loadingMorePublic || !_publicHasMore) return;
-    setState(() => _loadingMorePublic = true);
-
-    final page = await widget.loadMoreReports(_publicNextPage);
-    if (!mounted) return;
-
-    if (page.error.isNotEmpty) {
-      setState(() => _loadingMorePublic = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(page.error),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final seen = _publicReports.map((r) => r.taskId).toSet();
-    setState(() {
-      _loadingMorePublic = false;
-      _publicReports = [
-        ..._publicReports,
-        ...page.items.where((r) => !seen.contains(r.taskId)),
-      ];
-      _publicHasMore = page.hasMore;
-      if (page.total > 0) _publicTotal = page.total;
-      _publicNextPage++;
     });
   }
 
@@ -511,12 +461,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (i > 0) const SizedBox(height: 10),
             _buildPublicReportRow(reports[i]),
           ],
-          if (_publicHasMore) ...[
+          if (_publicTotal > reports.length) ...[
             const SizedBox(height: 12),
             _buildViewMoreButton(
               key: const Key('public-view-more'),
-              isLoading: _loadingMorePublic,
-              onTap: _loadMorePublicReports,
+              label: 'ดูทั้งหมด',
+              icon: Icons.arrow_forward,
+              isLoading: false,
+              onTap: () => Get.toNamed('/public-reports'),
             ),
           ],
         ],
@@ -686,7 +638,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // ---------- กิจกรรมล่าสุด ----------
 
   Widget _buildRecentActivitiesSection() {
-    final activities = _bundle?.recentActivities ?? const <RecentActivity>[];
+    final all = _bundle?.recentActivities ?? const <RecentActivity>[];
+    // backend คืนมาได้ถึง 10 รายการ แต่ dashboard โชว์แค่ 5 อันดับแรก
+    final activities = all.take(DashboardService.recentActivityLimit).toList();
 
     return _buildSection(
       title: 'กิจกรรมล่าสุด',
