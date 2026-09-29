@@ -19,22 +19,23 @@ void main() {
         'report': {'score': 42},
       });
 
-  /// ตัวโหลดปลอมที่บันทึกทุกคำขอ — คืนหน้าละ [limit] รายการตามที่ถาม
+  /// ตัวโหลดปลอมที่บันทึกทุกคำขอ — คืนหน้าละ `limit` รายการตามที่ถาม
   PublicReportsLoader loaderFor(
-    List<({int page, int limit})> calls, {
+    List<PublicReportsQuery> calls, {
     int total = 12,
     String error = '',
   }) {
-    return ({required int page, required int limit}) async {
-      calls.add((page: page, limit: limit));
+    return (query) async {
+      calls.add(query);
       if (error.isNotEmpty) return PublicReportsPage(error: error);
-      final start = (page - 1) * limit;
+      final start = (query.page - 1) * query.limit;
       final names = [
-        for (var i = start; i < start + limit && i < total; i++) 'public-$i',
+        for (var i = start; i < start + query.limit && i < total; i++)
+          'public-$i',
       ];
       return PublicReportsPage(
         items: names.map(item).toList(growable: false),
-        hasMore: start + limit < total,
+        hasMore: start + query.limit < total,
         total: total,
       );
     };
@@ -62,7 +63,7 @@ void main() {
     tester,
   ) async {
     useTallViewport(tester);
-    final calls = <({int page, int limit})>[];
+    final calls = <PublicReportsQuery>[];
     await pumpScreen(tester, loaderFor(calls));
 
     expect(calls.single.page, 1);
@@ -81,7 +82,7 @@ void main() {
     tester,
   ) async {
     useTallViewport(tester);
-    final calls = <({int page, int limit})>[];
+    final calls = <PublicReportsQuery>[];
     await pumpScreen(tester, loaderFor(calls));
 
     final button = find.byKey(const Key('public-reports-load-more'));
@@ -102,7 +103,7 @@ void main() {
     var call = 0;
     await pumpScreen(
       tester,
-      ({required int page, required int limit}) async {
+      (query) async {
         call++;
         if (call == 1) {
           return PublicReportsPage(
@@ -130,7 +131,7 @@ void main() {
 
   testWidgets('หน้าสุดท้ายซ่อนปุ่มโหลดเพิ่มเติม', (tester) async {
     useTallViewport(tester);
-    await pumpScreen(tester, loaderFor(<({int page, int limit})>[], total: 3));
+    await pumpScreen(tester, loaderFor(<PublicReportsQuery>[], total: 3));
 
     expect(find.text('แสดง 3 จาก 3 รายการ'), findsOneWidget);
     expect(find.byKey(const Key('public-reports-load-more')), findsNothing);
@@ -143,7 +144,7 @@ void main() {
     var call = 0;
     await pumpScreen(
       tester,
-      ({required int page, required int limit}) async {
+      (query) async {
         call++;
         if (call == 1) {
           return PublicReportsPage(
@@ -165,10 +166,67 @@ void main() {
     expect(find.byKey(const Key('public-reports-load-more')), findsOneWidget);
   });
 
+  testWidgets('เปลี่ยนตัวกรองแล้วกลับไปเริ่มที่หน้า 1 พร้อมส่งค่าไปเซิร์ฟเวอร์', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    final calls = <PublicReportsQuery>[];
+    await pumpScreen(tester, loaderFor(calls));
+
+    // เปิดเมนูประเภทไฟล์แล้วเลือก APK
+    await tester.tap(find.byTooltip('กรองตามประเภทไฟล์'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('APK').last);
+    await tester.pumpAndSettle();
+
+    expect(calls.last.page, 1);
+    expect(calls.last.fileType, 'apk');
+    expect(find.textContaining('ประเภท: APK'), findsOneWidget);
+  });
+
+  testWidgets('เลือกสถานะแล้วส่ง status ไปกรอง และเรียงตามคะแนนได้', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    final calls = <PublicReportsQuery>[];
+    await pumpScreen(tester, loaderFor(calls));
+
+    await tester.tap(find.byTooltip('กรองตามสถานะ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('สำเร็จ').last);
+    await tester.pumpAndSettle();
+
+    expect(calls.last.page, 1);
+    expect(calls.last.status, 'success');
+    expect(find.textContaining('สถานะ: สำเร็จ'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('เรียงลำดับ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('ความเสี่ยง').last);
+    await tester.pumpAndSettle();
+
+    expect(calls.last.sortField, 'score');
+    expect(calls.last.page, 1);
+  });
+
+  testWidgets('ค้นหาแล้วส่งคำค้นไปกับคำขอเดียวกับตัวกรองอื่น', (tester) async {
+    useTallViewport(tester);
+    final calls = <PublicReportsQuery>[];
+    await pumpScreen(tester, loaderFor(calls));
+
+    await tester.enterText(find.byType(TextField).first, 'invoice');
+    // เดโบาวน์ชื่อไฟล์ 350 มิลลิวินาที — pumpAndSettle ไม่รอ timer ที่ยังไม่ยิงเฟรม
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(calls.last.search, 'invoice');
+    expect(calls.last.page, 1);
+  });
+
   testWidgets('ไม่มีรายงานสาธารณะต้องขึ้น empty state ไม่ใช่ error', (
     tester,
   ) async {
-    await pumpScreen(tester, loaderFor(<({int page, int limit})>[], total: 0));
+    await pumpScreen(tester, loaderFor(<PublicReportsQuery>[], total: 0));
 
     expect(find.text('ยังไม่มีรายงานสาธารณะ'), findsOneWidget);
     expect(find.byKey(const Key('public-reports-load-more')), findsNothing);

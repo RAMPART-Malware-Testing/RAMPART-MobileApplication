@@ -160,10 +160,19 @@ class DashboardService {
   ///
   /// หน้าเว็บยิง endpoint นี้โดยไม่แนบ token แต่ทุก endpoint อื่นของระบบรับ token
   /// ใน body เช่นกัน จึงส่งไปด้วย — ถ้า backend ไม่ได้ตรวจก็จะไม่รับรู้
+  ///
+  /// ตัวกรอง (`s`, `status`, `file_type`) และทิศทางการเรียงรับได้เหมือน endpoint
+  /// `/analysis/history` (ดู `ReportsHistoryParams`) จึงใช้ชุดเดียวกับหน้ารายงาน
+  /// ของผู้ใช้ได้
   Future<dynamic> publicReports({
     String? token,
     int page = 1,
     int limit = publicReportLimit,
+    String? s,
+    String? status,
+    String? fileType,
+    String sortField = 'created_at',
+    int sortDirection = -1,
   }) async {
     try {
       final res = await _http.post(
@@ -171,7 +180,10 @@ class DashboardService {
         data: {
           'page': page,
           'limit': limit,
-          'created_at': -1,
+          if (s != null && s.isNotEmpty) 's': s,
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (fileType != null && fileType.isNotEmpty) 'file_type': fileType,
+          if (sortField.isNotEmpty) sortField: sortDirection >= 0 ? 1 : -1,
           if (token != null) 'token': token,
         },
       );
@@ -188,9 +200,23 @@ class DashboardService {
   Future<PublicReportsPage> loadPublicReportsPage({
     required int page,
     int limit = publicReportLimit,
+    String? s,
+    String? status,
+    String? fileType,
+    String sortField = 'created_at',
+    int sortDirection = -1,
   }) async {
     final token = await _accessToken();
-    final res = await publicReports(token: token, page: page, limit: limit);
+    final res = await publicReports(
+      token: token,
+      page: page,
+      limit: limit,
+      s: s,
+      status: status,
+      fileType: fileType,
+      sortField: sortField,
+      sortDirection: sortDirection,
+    );
     return PublicReportsPage.fromResponse(res, limit: limit);
   }
 

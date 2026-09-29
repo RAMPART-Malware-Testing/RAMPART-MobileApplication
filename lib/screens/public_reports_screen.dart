@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -6,10 +8,33 @@ import '../models/analysis.dart';
 import '../models/dashboard_stats.dart';
 import '../services/dashboard_service.dart';
 import '../widgets/analysis_components.dart';
+import '../widgets/report_filter_bar.dart';
+
+/// พารามิเตอร์ของหนึ่งคำขอ — รวมตัวกรองทั้งหมดไว้ที่เดียวกับหน้ารายงานของผู้ใช้
+class PublicReportsQuery {
+  const PublicReportsQuery({
+    required this.page,
+    required this.limit,
+    this.search = '',
+    this.status = '',
+    this.fileType = '',
+    this.sortField = 'created_at',
+    this.sortDirection = -1,
+  });
+
+  final int page;
+  final int limit;
+  final String search;
+  final String status;
+  final String fileType;
+  final String sortField;
+  final int sortDirection;
+}
 
 /// จุดเชื่อมสำหรับเทสต์ — ค่าเริ่มต้นยิงเซิร์ฟเวอร์จริง
-typedef PublicReportsLoader =
-    Future<PublicReportsPage> Function({required int page, required int limit});
+typedef PublicReportsLoader = Future<PublicReportsPage> Function(
+  PublicReportsQuery query,
+);
 
 /// หน้า "Public Reports" — รายงานสาธารณะทั้งหมด แบ่งหน้าโดยเซิร์ฟเวอร์
 ///
@@ -21,11 +46,16 @@ class PublicReportsScreen extends StatefulWidget {
 
   final PublicReportsLoader loadPage;
 
-  static Future<PublicReportsPage> defaultLoadPage({
-    required int page,
-    required int limit,
-  }) {
-    return dashboardService.loadPublicReportsPage(page: page, limit: limit);
+  static Future<PublicReportsPage> defaultLoadPage(PublicReportsQuery query) {
+    return dashboardService.loadPublicReportsPage(
+      page: query.page,
+      limit: query.limit,
+      s: query.search,
+      status: query.status,
+      fileType: query.fileType,
+      sortField: query.sortField,
+      sortDirection: query.sortDirection,
+    );
   }
 
   @override
@@ -36,6 +66,14 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
   static const int _pageSize = DashboardService.publicReportLimit;
 
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
+
+  String _search = '';
+  String _selectedStatus = '';
+  String _selectedFileType = '';
+  String _sortField = 'created_at';
+  int _sortDirection = -1;
 
   List<AnalysisHistoryItem> _items = const [];
   int _page = 1;
@@ -55,8 +93,10 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -68,6 +108,17 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     }
   }
 
+  /// รวมตัวกรองที่ผู้ใช้เลือกไว้ — เปลี่ยนตัวกรองแล้วต้องยิงใหม่จากหน้า 1 เสมอ
+  PublicReportsQuery _query(int page) => PublicReportsQuery(
+    page: page,
+    limit: _pageSize,
+    search: _search,
+    status: _selectedStatus,
+    fileType: _selectedFileType,
+    sortField: _sortField,
+    sortDirection: _sortDirection,
+  );
+
   Future<void> _loadFirstPage() async {
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
@@ -75,7 +126,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       _error = '';
     });
 
-    final result = await widget.loadPage(page: 1, limit: _pageSize);
+    final result = await widget.loadPage(_query(1));
     if (!mounted) return;
 
     setState(() {
@@ -94,7 +145,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     setState(() => _loadingMore = true);
 
     final next = _page + 1;
-    final result = await widget.loadPage(page: next, limit: _pageSize);
+    final result = await widget.loadPage(_query(next));
     if (!mounted) return;
 
     if (result.error.isNotEmpty) {
@@ -125,6 +176,39 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       }
       _hasNext = result.hasMore;
     });
+  }
+
+  void _onSearchChanged(String value) {
+    _search = value.trim();
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 350),
+      _loadFirstPage,
+    );
+  }
+
+  void _selectStatus(String value) {
+    if (_selectedStatus == value) return;
+    setState(() => _selectedStatus = value);
+    _loadFirstPage();
+  }
+
+  void _selectFileType(String value) {
+    if (_selectedFileType == value) return;
+    setState(() => _selectedFileType = value);
+    _loadFirstPage();
+  }
+
+  void _selectSort(ReportFilterOption option) {
+    setState(() {
+      if (_sortField == option.value) {
+        _sortDirection = _sortDirection == 1 ? -1 : 1;
+      } else {
+        _sortField = option.value;
+        _sortDirection = -1;
+      }
+    });
+    _loadFirstPage();
   }
 
   int _pagesOf(int total) =>
@@ -227,7 +311,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
             ],
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 0, 4),
+            padding: const EdgeInsets.fromLTRB(8, 0, 0, 12),
             child: Text(
               _total > 0
                   ? 'รายงานที่เปิดให้ทุกคนดูได้ • ทั้งหมด '
@@ -239,6 +323,32 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
                 color: AnalysisColors.textSecondary,
               ),
             ),
+          ),
+          // ชุดตัวกรองชุดเดียวกับแท็บ Reports — backend รองรับครบทั้งหมด
+          // (`ReportsHistoryParams`) ผู้ใช้จึงกรองชุดเดียวกันได้ทั้งสองหน้า
+          ReportSearchField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            onSubmitted: (_) {
+              _searchDebounce?.cancel();
+              _loadFirstPage();
+            },
+            onClear: () {
+              _searchController.clear();
+              _onSearchChanged('');
+            },
+            hasQuery: _search.isNotEmpty,
+            hintText: 'ค้นหาด้วยชื่อไฟล์ หรือ MD5...',
+          ),
+          const SizedBox(height: 10),
+          ReportFilterBar(
+            status: _selectedStatus,
+            onStatus: _selectStatus,
+            fileType: _selectedFileType,
+            onFileType: _selectFileType,
+            sortField: _sortField,
+            sortDirection: _sortDirection,
+            onSort: _selectSort,
           ),
         ],
       ),

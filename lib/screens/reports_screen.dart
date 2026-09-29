@@ -5,17 +5,10 @@ import 'package:get/get.dart';
 
 import '../models/analysis.dart';
 import '../services/analysis_service.dart';
-import '../services/report_download_service.dart';
 import '../services/session_guard.dart';
 import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
-
-class _FilterOption {
-  const _FilterOption(this.value, this.label);
-
-  final String value;
-  final String label;
-}
+import '../widgets/report_filter_bar.dart';
 
 class _ToolChip {
   const _ToolChip(this.tool, this.score);
@@ -51,29 +44,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// ดึงจากเซิร์ฟเวอร์ทีละ 5 รายการ — backend รับ page/limit จริง
   /// (`schemas/analy.py`) การแบ่งหน้าเลยไม่ได้ทำในเครื่อง
   static const int _pageSize = 5;
-  static const List<_FilterOption> _statusFilters = [
-    _FilterOption('', 'ทั้งหมด'),
-    _FilterOption('success', 'สำเร็จ'),
-    _FilterOption('processing', 'กำลังวิเคราะห์'),
-    _FilterOption('failed', 'ไม่สำเร็จ'),
-    _FilterOption('pending', 'รอดำเนินการ'),
-  ];
-  static const List<String> _fileTypes = [
-    'apk',
-    'exe',
-    'msi',
-    'bat',
-    'dmg',
-    'ipa',
-    'zip',
-  ];
-  static const List<_FilterOption> _sortOptions = [
-    _FilterOption('created_at', 'วันที่'),
-    _FilterOption('file_name', 'ชื่อไฟล์'),
-    _FilterOption('file_size', 'ขนาด'),
-    _FilterOption('score', 'ความเสี่ยง'),
-  ];
-
   final AnalysisService _service = AnalysisService();
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
@@ -97,7 +67,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _search = '';
   String _sortField = 'created_at';
   int _sortDirection = -1;
-  final Set<String> _downloading = {};
 
   @override
   void initState() {
@@ -272,7 +241,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadFirstPage();
   }
 
-  void _selectSort(_FilterOption option) {
+  void _selectSort(ReportFilterOption option) {
     setState(() {
       if (_sortField == option.value) {
         _sortDirection = _sortDirection == 1 ? -1 : 1;
@@ -282,64 +251,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     });
     _loadFirstPage();
-  }
-
-  Future<void> _downloadReport(AnalysisHistoryItem report) async {
-    if (report.md5 == null) return;
-
-    final toolList = report.toolList;
-    final tool = toolList.isNotEmpty ? toolList.first : 'virustotal';
-
-    setState(() => _downloading.add(report.aid));
-
-    try {
-      final result = await ReportDownloadService.instance.download(
-        tool: tool,
-        md5: report.md5!,
-        fileName: report.fileName,
-      );
-
-      if (!mounted) return;
-
-      setState(() => _downloading.remove(report.aid));
-
-      if (result.success && result.path != null) {
-        Get.snackbar(
-          'ดาวน์โหลดสำเร็จ',
-          'บันทึกไฟล์ที่: ${result.path}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AnalysisColors.completed.withValues(alpha: 0.9),
-          colorText: Colors.white,
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 3),
-        );
-      } else {
-        Get.snackbar(
-          'ดาวน์โหลดล้มเหลว',
-          result.message.isNotEmpty
-              ? result.message
-              : 'ไม่สามารถดาวน์โหลดรายงานได้',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AnalysisColors.failed.withValues(alpha: 0.9),
-          colorText: Colors.white,
-          margin: const EdgeInsets.all(16),
-          duration: const Duration(seconds: 4),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _downloading.remove(report.aid));
-
-      Get.snackbar(
-        'ดาวน์โหลดล้มเหลว',
-        'เกิดข้อผิดพลาด: $e',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AnalysisColors.failed.withValues(alpha: 0.9),
-        colorText: Colors.white,
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
-      );
-    }
   }
 
   void _openItem(AnalysisHistoryItem item) {
@@ -473,9 +384,29 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildSearchField(),
+          ReportSearchField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            onSubmitted: (_) {
+              _searchDebounce?.cancel();
+              _loadFirstPage();
+            },
+            onClear: () {
+              _searchController.clear();
+              _onSearchChanged('');
+            },
+            hasQuery: _search.isNotEmpty,
+          ),
           const SizedBox(height: 10),
-          _buildFilterBar(),
+          ReportFilterBar(
+            status: _selectedStatus,
+            onStatus: _selectStatus,
+            fileType: _selectedFileType,
+            onFileType: _selectFileType,
+            sortField: _sortField,
+            sortDirection: _sortDirection,
+            onSort: _selectSort,
+          ),
           // สัญญาณว่ากดแท็บแล้วกำลังยิงใหม่ — เหมือนแถบบาง ๆ ที่ Dashboard ใช้
           // ปรากฏเฉพาะตอนคำขอค้างอยู่เท่านั้น ไม่มี ticker ค้างตอนว่าง (R2)
           if (_refreshing) ...[
@@ -486,208 +417,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
               backgroundColor: Color(0x2200E5FF),
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return TextField(
-      controller: _searchController,
-      onChanged: _onSearchChanged,
-      onSubmitted: (_) {
-        _searchDebounce?.cancel();
-        _loadFirstPage();
-      },
-      style: const TextStyle(fontFamily: 'Kanit', color: Colors.white),
-      decoration: InputDecoration(
-        hintText: 'ค้นหาด้วยชื่อไฟล์ หรือ Task ID...',
-        hintStyle: const TextStyle(
-          fontFamily: 'Kanit',
-          color: AnalysisColors.textMuted,
-        ),
-        prefixIcon: const Icon(Icons.search, color: AnalysisColors.cyan),
-        suffixIcon: _search.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'ล้างคำค้นหา',
-                icon: const Icon(
-                  Icons.close,
-                  color: AnalysisColors.textSecondary,
-                ),
-                onPressed: () {
-                  _searchController.clear();
-                  _onSearchChanged('');
-                },
-              ),
-        filled: true,
-        fillColor: AnalysisColors.surface.withValues(alpha: 0.8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AnalysisColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AnalysisColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AnalysisColors.cyan),
-        ),
-      ),
-    );
-  }
-
-  /// ตัวกรองทั้งสามแบบรวมอยู่ในแถวเดียวที่เลื่อนแนวนอนได้
-  ///
-  /// เดิมกระจายเป็นชิป 17 ปุ่ม (สถานะ 5 + ประเภทไฟล์ 8 + เรียงตาม 4) กินพื้นที่
-  /// เกือบครึ่งจอทั้งที่ค่าส่วนใหญ่ยังเป็นค่าเริ่มต้น — ตอนนี้แต่ละปุ่มบอกค่าที่ใช้อยู่
-  /// ในตัว แล้วเปิดเมนูให้เลือก ส่วนปุ่มที่ถูกเปลี่ยนจะติดสีให้เห็นว่ากรองอยู่
-  Widget _buildFilterBar() {
-    return SizedBox(
-      height: 38,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        children: [
-          _buildStatusPill(),
-          const SizedBox(width: 8),
-          _buildFileTypePill(),
-          const SizedBox(width: 8),
-          _buildSortPill(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusPill() {
-    final current = _statusFilters.firstWhere(
-      (option) => option.value == _selectedStatus,
-      orElse: () => _statusFilters.first,
-    );
-    return PopupMenuButton<_FilterOption>(
-      tooltip: 'กรองตามสถานะ',
-      color: AnalysisColors.surfaceElevated,
-      onSelected: (option) => _selectStatus(option.value),
-      itemBuilder: (context) => [
-        for (final option in _statusFilters)
-          _menuItem(option, option.value == _selectedStatus),
-      ],
-      child: _pillShell(
-        text: 'สถานะ: ${current.label}',
-        isActive: _selectedStatus.isNotEmpty,
-      ),
-    );
-  }
-
-  Widget _buildFileTypePill() {
-    return PopupMenuButton<_FilterOption>(
-      tooltip: 'กรองตามประเภทไฟล์',
-      color: AnalysisColors.surfaceElevated,
-      onSelected: (option) => _selectFileType(option.value),
-      itemBuilder: (context) => [
-        _menuItem(const _FilterOption('', 'ทั้งหมด'), _selectedFileType.isEmpty),
-        for (final type in _fileTypes)
-          _menuItem(
-            _FilterOption(type, type.toUpperCase()),
-            _selectedFileType == type,
-          ),
-      ],
-      child: _pillShell(
-        text: 'ประเภท: ${_selectedFileType.isEmpty ? 'ทั้งหมด' : _selectedFileType.toUpperCase()}',
-        isActive: _selectedFileType.isNotEmpty,
-      ),
-    );
-  }
-
-  /// ปุ่มเรียงลำดับ — แตะรายการที่เลือกอยู่อีกครั้งเพื่อสลับทิศทาง (พฤติกรรมเดิม)
-  Widget _buildSortPill() {
-    final current = _sortOptions.firstWhere(
-      (option) => option.value == _sortField,
-      orElse: () => _sortOptions.first,
-    );
-    final arrow = _sortDirection == 1 ? '↑' : '↓';
-
-    return PopupMenuButton<_FilterOption>(
-      tooltip: 'เรียงลำดับ',
-      color: AnalysisColors.surfaceElevated,
-      onSelected: _selectSort,
-      itemBuilder: (context) => [
-        for (final option in _sortOptions)
-          _menuItem(
-            option,
-            option.value == _sortField,
-            suffix: option.value == _sortField
-                ? '$arrow ${_sortDirection == 1 ? 'เก่าสุดก่อน' : 'ใหม่สุดก่อน'}'
-                : null,
-          ),
-      ],
-      child: _pillShell(
-        text: 'เรียงตาม: ${current.label} $arrow',
-        isActive: _sortField != 'created_at' || _sortDirection != -1,
-      ),
-    );
-  }
-
-  PopupMenuItem<_FilterOption> _menuItem(
-    _FilterOption option,
-    bool selected, {
-    String? suffix,
-  }) {
-    return PopupMenuItem<_FilterOption>(
-      value: option,
-      height: 40,
-      child: Row(
-        children: [
-          Icon(
-            selected ? Icons.check : Icons.check_box_outline_blank,
-            size: 16,
-            color: selected ? AnalysisColors.cyan : AnalysisColors.textMuted,
-          ),
-          const SizedBox(width: 10),
-          Text(
-            suffix == null ? option.label : '${option.label} · $suffix',
-            style: TextStyle(
-              fontFamily: 'Kanit',
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? AnalysisColors.cyan : AnalysisColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _pillShell({required String text, required bool isActive}) {
-    final color = isActive ? AnalysisColors.cyan : AnalysisColors.textSecondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: isActive
-            ? AnalysisColors.cyan.withValues(alpha: 0.14)
-            : AnalysisColors.surface.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: isActive
-              ? AnalysisColors.cyan.withValues(alpha: 0.5)
-              : AnalysisColors.border,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            text,
-            style: TextStyle(
-              fontFamily: 'Kanit',
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Icon(Icons.expand_more, size: 16, color: color),
         ],
       ),
     );
@@ -866,9 +595,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final tier = score == null
         ? AnalysisScoreTier.fromRisk(report.riskLevel)
         : AnalysisScoreTier.fromScore(score);
-    final canDownload =
-        report.status.toLowerCase() == 'success' && report.md5 != null;
-    final isDownloading = _downloading.contains(report.aid);
 
     return InkWell(
       onTap: () => _openItem(report),
@@ -932,32 +658,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ],
                   ),
                 ),
-                if (canDownload) ...[
-                  IconButton(
-                    icon: isDownloading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AnalysisColors.cyan,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.download_outlined,
-                            color: AnalysisColors.cyan,
-                          ),
-                    iconSize: 20,
-                    onPressed: isDownloading
-                        ? null
-                        : () => _downloadReport(report),
-                    tooltip: 'ดาวน์โหลดรายงาน',
-                  ),
-                ] else
-                  const Icon(
-                    Icons.chevron_right,
-                    color: AnalysisColors.textSecondary,
-                  ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AnalysisColors.textSecondary,
+                ),
               ],
             ),
             const SizedBox(height: 12),

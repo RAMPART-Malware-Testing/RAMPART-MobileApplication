@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -6,12 +8,26 @@ import '../models/analysis.dart';
 import '../services/analysis_service.dart';
 import '../services/report_download_service.dart';
 import '../widgets/analysis_components.dart';
+import '../widgets/download_progress_dialog.dart';
 import '../widgets/tool_reports/virustotal_report.dart';
 import '../widgets/tool_reports/mobsf_report.dart';
 import '../widgets/tool_reports/cape_report.dart';
 
 class ToolReportScreen extends StatefulWidget {
   const ToolReportScreen({super.key});
+
+  /// ดาวน์โหลด JSON ได้เฉพาะสามเครื่องมือที่รายงานถูกเก็บแยกเป็นไฟล์
+  /// `.json` ต่อหนึ่งเครื่องมือ ส่วน `rampart_ai` / `gemini` ไม่มีไฟล์ของตัวเอง
+  /// (Gemini ถูกรวมอยู่ในรายงานหลักอยู่แล้ว) จึงไม่ต้องมีปุ่มดาวน์โหลด
+  static const Set<String> downloadableTools = {
+    'virustotal',
+    'mobsf',
+    'cape',
+  };
+
+  /// เครื่องมือนี้มีไฟล์ JSON ให้ดาวน์โหลดหรือไม่
+  static bool supportsJsonDownload(String tool) =>
+      downloadableTools.contains(AnalysisReport.toolRouteKey(tool));
 
   @override
   State<ToolReportScreen> createState() => _ToolReportScreenState();
@@ -29,6 +45,17 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
   bool _loading = false;
   String? _error;
   bool _downloading = false;
+
+  /// ใช้ค่าที่กล่องความคืบหน้าฟังอยู่ — กล่อง rebuild เฉพาะตัวเอง
+  /// ไม่ดึงทั้งหน้าจอมาวาดใหม่ทุกครั้งที่เข้ามีข้อมูล (ดู R3 ใน AGENTS.md)
+  final ValueNotifier<DownloadProgress?> _downloadProgress =
+      ValueNotifier<DownloadProgress?>(null);
+
+  @override
+  void dispose() {
+    _downloadProgress.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -66,11 +93,32 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
     });
   }
 
+  bool get _canDownload {
+    final md5 = _md5;
+    if (md5 == null || md5.isEmpty) return false;
+    return ToolReportScreen.supportsJsonDownload(_tool);
+  }
+
   Future<void> _download() async {
     final md5 = _md5;
     if (md5 == null || md5.isEmpty || _downloading) return;
 
     setState(() => _downloading = true);
+    _downloadProgress.value = DownloadProgress.zero;
+
+    // กล่องความคืบหน้าปิดเองไม่ได้ (barrierDismissible: false + PopScope) แต่ต้องการ
+    // flag กันเผื่อว่ามันถูกปิดไปทางอื่นแล้ว จะได้ไม่ไป pop หน้าจอหลักทั้งที่ตั้งใจปิดกล่อง
+    var progressOpen = true;
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => DownloadProgressDialog(
+          title: 'กำลังดาวน์โหลดรายงาน ${analysisToolLabel(_tool)}',
+          progress: _downloadProgress,
+        ),
+      ).whenComplete(() => progressOpen = false),
+    );
 
     DownloadOutcome outcome;
     try {
@@ -78,25 +126,31 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
         tool: _tool,
         md5: md5,
         fileName: _fileName,
+        onProgress: (value) => _downloadProgress.value = value,
       );
     } catch (e) {
       outcome = DownloadOutcome(
         success: false,
+        fileName: _fileName,
         message: 'เกิดข้อผิดพลาด: $e',
       );
     }
 
+    // หน้าจอถูกปิดไประหว่างดาวน์โหลด — กล่องความคืบหน้าถูกปิดไปพร้อม route แล้ว
+    // และไม่ต้อง setState บน widget ที่ตายแล้ว
     if (!mounted) return;
     setState(() => _downloading = false);
 
-    Get.snackbar(
-      outcome.success ? 'ดาวน์โหลดสำเร็จ' : 'ดาวน์โหลดไม่สำเร็จ',
-      outcome.success ? 'บันทึกไว้ที่\n${outcome.path}' : outcome.message,
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor:
-          outcome.success ? AnalysisColors.surface : AnalysisColors.failed,
-      colorText: outcome.success ? AnalysisColors.textPrimary : Colors.white,
-      duration: const Duration(seconds: 4),
+    if (progressOpen) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => DownloadResultDialog(
+        outcome: outcome,
+        onRetry: outcome.success ? null : _download,
+      ),
     );
   }
 
@@ -144,7 +198,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
               ),
             ),
           ),
-          if (_md5 != null && _md5.isNotEmpty)
+          if (_canDownload)
             IconButton(
               tooltip: 'ดาวน์โหลดรายงาน',
               icon: _downloading
