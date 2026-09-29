@@ -74,6 +74,20 @@ String _encodePayload(RemoteMessage message) {
   return route;
 }
 
+/// งานเดิมที่หน้าของมัน (/analysis-progress หรือ /analysis-result) เปิดค้างอยู่
+/// บนสุดของสแตกแล้ว — แตะแจ้งเตือนของงานเดียวกันซ้ำต้องไม่ push หน้าซ้อนกัน
+/// ไม่งั้นกดย้อนกลับจะเจอหน้าเดิมซ้ำ ๆ เหมือนปุ่มย้อนพัง
+bool shouldSkipTaskPushNavigation({
+  required String currentRoute,
+  required Object? currentArguments,
+  required String taskId,
+}) {
+  final onTaskScreen =
+      currentRoute == '/analysis-progress' ||
+      currentRoute == '/analysis-result';
+  return onTaskScreen && currentArguments?.toString() == taskId;
+}
+
 void _openFromPush(String? route, String? taskId) {
   if (route == null || route.isEmpty || !_pushRoutes.contains(route)) {
     debugPrint('[FCM] ไม่รู้จักปลายทางจากการแจ้งเตือน: $route');
@@ -86,6 +100,14 @@ void _openFromPush(String? route, String? taskId) {
   }
   if (_pushTaskRoutes.contains(route)) {
     if (taskId == null || taskId.isEmpty) return;
+    if (shouldSkipTaskPushNavigation(
+      currentRoute: Get.currentRoute,
+      currentArguments: Get.arguments,
+      taskId: taskId,
+    )) {
+      debugPrint('[FCM] งาน $taskId เปิดอยู่แล้ว ข้ามการ push $route ซ้ำ');
+      return;
+    }
     Get.toNamed(route, arguments: taskId);
     return;
   }

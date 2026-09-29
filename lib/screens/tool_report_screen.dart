@@ -131,7 +131,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
           IconButton(
             tooltip: 'ย้อนกลับ',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: Get.back,
+            onPressed: popAnalysisScreen,
           ),
           Expanded(
             child: Text(
@@ -443,7 +443,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
             ),
             const SizedBox(height: 20),
             OutlinedButton.icon(
-              onPressed: Get.back,
+              onPressed: popAnalysisScreen,
               icon: const Icon(Icons.arrow_back, size: 18),
               label: const Text('ย้อนกลับ'),
               style: OutlinedButton.styleFrom(
@@ -480,7 +480,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
             ),
             const SizedBox(height: 20),
             OutlinedButton.icon(
-              onPressed: Get.back,
+              onPressed: popAnalysisScreen,
               icon: const Icon(Icons.arrow_back, size: 18),
               label: const Text('ย้อนกลับ'),
               style: OutlinedButton.styleFrom(

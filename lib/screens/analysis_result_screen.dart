@@ -308,7 +308,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           IconButton(
             tooltip: 'ย้อนกลับ',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: Get.back,
+            onPressed: popAnalysisScreen,
           ),
           const Expanded(
             child: Text(

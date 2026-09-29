@@ -97,7 +97,15 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
 
     if (result.isSuccess) {
       _stopPolling();
-      Get.offNamed('/analysis-result', arguments: _taskId);
+      if (Get.currentRoute == '/analysis-progress') {
+        Get.offNamed('/analysis-result', arguments: _taskId);
+      } else {
+        // ระหว่างรอผล มีหน้าอื่นขึ้นมาทับแล้ว (เช่น แตะแจ้งเตือนแล้วเปิด
+        // /analysis-result ของงานนี้ก่อน poll จบ) — offNamed จะโดน
+        // preventDuplicates กลืนเงียบ ๆ ทำให้หน้านี้ติดค้างในสแตก
+        // ผู้ใช้กดย้อนกลับมาเจอหน้าค้าง — ถอดตัวเองออกจากสแตกแทน
+        Navigator.of(context).removeRoute(ModalRoute.of(context)!);
+      }
     } else if (result.isFailed || result.isNotFound) {
       _stopPolling();
     }
@@ -229,7 +237,7 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
           IconButton(
             tooltip: 'ย้อนกลับ',
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Get.back(),
+            onPressed: popAnalysisScreen,
           ),
           const SizedBox(width: 4),
           const Expanded(

@@ -1,6 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../models/analysis.dart';
+
+/// ปุ่มย้อนกลับของหน้าวิเคราะห์ (progress / result / tool-report)
+///
+/// ปกติเท่ากับ Get.back แต่ถ้าสแตกไม่เหลือ route ให้ pop (เช่น สแตกถูก
+/// offAllNamed ล้างระหว่างอยู่หน้านี้) จะกลับไปหน้าหลักแทน — ไม่งั้นปุ่ม
+/// กดแล้วเงียบ ผู้ใช้ติดอยู่ในหน้าโดยกดย้อนไม่ได้
+void popAnalysisScreen() {
+  final navigator = Get.key.currentState;
+  if (navigator != null && navigator.canPop()) {
+    navigator.pop();
+  } else {
+    Get.offAllNamed('/home');
+  }
+}
 
 class AnalysisColors {
   const AnalysisColors._();
