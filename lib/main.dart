@@ -1,7 +1,11 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/date_symbol_data_local.dart';
+// เจาะจงแค่ Intl — intl ทั้งไลบรารีมีคลาส TextDirection ของตัวเอง
+// ซึ่งจะชนกับ TextDirection ของ Flutter ที่ใช้ในไฟล์นี้
+import 'package:intl/intl.dart' show Intl;
 import 'package:rampart/services/fcm_service.dart';
+import 'package:rampart/services/network_monitor_service.dart';
 import 'package:rampart/screens/PINSetupScreen.dart';
 import 'package:rampart/screens/PinVerifyScreen.dart';
 import 'package:rampart/screens/login_screen.dart';
@@ -11,24 +15,112 @@ import 'package:rampart/screens/forgot_password_screen.dart';
 import 'package:rampart/screens/main_screen.dart';
 import 'package:rampart/screens/analysis_progress_screen.dart';
 import 'package:rampart/screens/analysis_result_screen.dart';
+import 'package:rampart/screens/activity_history_screen.dart';
+import 'package:rampart/screens/banned_screen.dart';
+import 'package:rampart/screens/help_screen.dart';
+import 'package:rampart/screens/profile_edit_screen.dart';
+import 'package:rampart/screens/reset_password_screen.dart';
+import 'package:rampart/screens/tool_report_screen.dart';
+import 'package:rampart/screens/splash_screen.dart';
 import 'package:rampart/services/app_lifecycle_observer.dart';
 import 'package:rampart/services/pin_service.dart';
 import 'package:rampart/theme/app_theme.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  // ตั้งค่า notification ล้มเหลวต้องไม่ทำให้แอปเริ่มไม่ขึ้น
-  try {
-    await FcmService().initialize();
-  } catch (e) {
-    print('[FCM] Initialization failed: $e');
+  runApp(const _Bootstrap());
+}
+
+class _Bootstrap extends StatefulWidget {
+  const _Bootstrap();
+
+  @override
+  State<_Bootstrap> createState() => _BootstrapState();
+}
+
+class _BootstrapState extends State<_Bootstrap> {
+  Widget? _app;
+  String? _failure;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
   }
-  final pinService = PINService();
-  await pinService.checkLoginStatus();
-  Get.put(pinService);
-  runApp(AppLifecycleObserver(child: MyApp(initialRoute: pinService.initialRoute)));
-  FcmService().handlePendingInitialMessage();
+
+  Future<void> _start() async {
+    final pinService = PINService();
+    final monitor = NetworkMonitorService();
+
+    // intl ไม่ได้โหลดข้อมูล locale ให้เอง — หน้าจอที่จัดรูปแบบวันที่เป็นภาษาไทย
+    // (settings, activity history) จะโยน LocaleDataException ตอน build ถ้าไม่โหลดไว้ก่อน
+    // เป็นข้อมูลในหน่วยความจำล้วน ไม่มีการอ่านไฟล์หรือเครือข่าย
+    Intl.defaultLocale = 'th';
+    await initializeDateFormatting('th');
+
+    try {
+      await pinService.checkLoginStatus();
+    } catch (e) {
+      debugPrint('[bootstrap] checkLoginStatus failed: $e');
+      if (mounted) {
+        setState(() => _failure = 'อ่านข้อมูลการเข้าสู่ระบบไม่สำเร็จ กำลังเข้าสู่ระบบใหม่');
+      }
+    }
+    if (!mounted) return;
+    Get.put(pinService);
+    Get.put(monitor);
+    monitor.onReconnect = _initPush;
+
+    setState(() {
+      _failure = null;
+      _app = AppLifecycleObserver(
+        child: MyApp(initialRoute: pinService.initialRoute),
+      );
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await monitor.checkNow();
+      if (!monitor.isOnline.value) return;
+      await _initPush();
+    });
+  }
+
+  /// เรียกได้ทั้งตอนเปิดแอปและตอนที่ [NetworkMonitorService] แจ้งว่ากลับมาออนไลน์
+  Future<void> _initPush() async {
+    final ready = await FcmService().initialize();
+    if (!ready || !mounted) return;
+    FcmService().handlePendingInitialMessage();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = _app;
+    if (app != null) return app;
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Stack(
+        children: [
+          const SplashScreen(),
+          if (_failure != null)
+            Positioned(
+              left: 24,
+              right: 24,
+              bottom: 32,
+              child: Text(
+                _failure!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Kanit',
+                  color: Colors.white70,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -86,6 +178,36 @@ class MyApp extends StatelessWidget {
         GetPage(
           name: '/analysis-result',
           page: () => const AnalysisResultScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/banned',
+          page: () => const BannedScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/profile-edit',
+          page: () => const ProfileEditScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/reset-password',
+          page: () => const ResetPasswordScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/activity-history',
+          page: () => const ActivityHistoryScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/tool-report',
+          page: () => const ToolReportScreen(),
+          transition: Transition.fadeIn,
+        ),
+        GetPage(
+          name: '/help',
+          page: () => const HelpScreen(),
           transition: Transition.fadeIn,
         ),
       ],

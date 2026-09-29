@@ -1,8 +1,31 @@
+import 'dart:convert';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:rampart/services/authService.dart';
+
+/// key เดียวกับที่หน้าตั้งค่าเขียน (ดู lib/screens/settings_screen.dart)
+const String _notifEnabledKey = 'notif_enabled';
+
+/// อ่านค่าที่ผู้ใช้ตั้งไว้ว่าต้องการรับการแจ้งเตือนหรือไม่
+///
+/// อ่านจาก storage ทุกครั้งแทนการจำไว้ในหน่วยความจำ เพราะฟังก์ชันนี้ถูกเรียกจาก
+/// ทั้ง isolate หลักและ isolate เบื้องหลัง ซึ่งไม่แชร์หน่วยความจำกัน
+/// ค่าเริ่มต้นคือเปิด เมื่ออ่านไม่ได้หรือยังไม่เคยตั้ง
+Future<bool> _notificationsEnabled() async {
+  try {
+    final stored = await const FlutterSecureStorage().read(
+      key: _notifEnabledKey,
+    );
+    return stored != 'false';
+  } catch (_) {
+    return true;
+  }
+}
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -11,17 +34,63 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.notification?.body ?? '';
   print('[FCM] Background: $title — $body');
   await _ensureNotificationsInit();
+  if (!await _notificationsEnabled()) return;
   await _showLocalNotification(
     id: message.messageId.hashCode,
     title: title,
     body: body,
-    payload: message.data['route'],
+    payload: _encodePayload(message),
   );
 }
 
 final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
 bool _notificationsInited = false;
+
+/// ปลายทางที่การแจ้งเตือนได้รับอนุญาตให้เปิด
+///
+/// route ที่ไม่อยู่ในลิสต์ต้องถูกเมิน ไม่ใช่ปล่อยให้ GetMaterialApp ตกไปที่
+/// unknownRoute ซึ่งตั้งไว้เป็นหน้า login — ผู้ใช้ที่แตะแจ้งเตือนจะถูกเด้งออกจาก
+/// session ที่ยังใช้งานได้
+const Set<String> _pushRoutes = {
+  '/home',
+  '/analysis-progress',
+  '/analysis-result',
+  '/help',
+};
+
+/// สองหน้านี้รับ Get.arguments เป็น taskId ตรง ๆ ไม่ใช่ Map
+const Set<String> _pushTaskRoutes = {'/analysis-progress', '/analysis-result'};
+
+/// ห่อ route กับ taskId เป็น JSON เพื่อให้ปลายทางที่ต้องใช้ taskId เปิดได้
+/// แจ้งเตือนที่ไม่มี taskId ยังส่ง route เดี่ยว ๆ เหมือนเดิม
+String _encodePayload(RemoteMessage message) {
+  final route = message.data['route'];
+  if (route is! String || route.isEmpty) return '';
+  final taskId = message.data['task_id'] ?? message.data['taskId'];
+  if (taskId is String && taskId.isNotEmpty && _pushTaskRoutes.contains(route)) {
+    return jsonEncode({'route': route, 'task_id': taskId});
+  }
+  return route;
+}
+
+void _openFromPush(String? route, String? taskId) {
+  if (route == null || route.isEmpty || !_pushRoutes.contains(route)) {
+    debugPrint('[FCM] ไม่รู้จักปลายทางจากการแจ้งเตือน: $route');
+    return;
+  }
+  // ยังไม่มี navigator (แอปยังไม่ขึ้นหน้าจอ) การเรียกตอนนี้จะถูกทิ้งเงียบ ๆ
+  if (Get.key.currentState == null) {
+    debugPrint('[FCM] navigator ยังไม่พร้อม ข้ามการเปิด $route');
+    return;
+  }
+  if (_pushTaskRoutes.contains(route)) {
+    if (taskId == null || taskId.isEmpty) return;
+    Get.toNamed(route, arguments: taskId);
+    return;
+  }
+  Get.toNamed(route);
+}
 
 Future<void> _ensureNotificationsInit() async {
   if (_notificationsInited) return;
@@ -72,24 +141,58 @@ Future<void> _showLocalNotification({
 }
 
 void _onNotificationTap(NotificationResponse response) {
-  final route = response.payload;
-  if (route != null && route.isNotEmpty) {
-    Get.toNamed(route);
+  final payload = response.payload;
+  if (payload == null || payload.isEmpty) return;
+
+  // payload รุ่นใหม่เป็น JSON ที่พา taskId มาด้วย ส่วนรุ่นเก่าเป็น route เดี่ยว ๆ
+  if (payload.startsWith('{')) {
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is Map) {
+        final route = decoded['route'];
+        final taskId = decoded['task_id'];
+        _openFromPush(
+          route is String ? route : null,
+          taskId is String ? taskId : null,
+        );
+      }
+    } catch (_) {
+      debugPrint('[FCM] payload ของการแจ้งเตือนอ่านไม่ได้');
+    }
+    return;
   }
+
+  _openFromPush(payload, null);
 }
 
 class FcmService {
   static final FcmService _instance = FcmService._internal();
   factory FcmService() => _instance;
 
-  String? _deviceToken;
-  String? get deviceToken => _deviceToken;
+  /// เป็น observable เพราะตอนนี้ Firebase อาจเริ่มหลังจากผู้ใช้ล็อกอินเสร็จแล้ว
+  /// หน้าจอที่ต้องการ token จึงต้องรอค่านี้ ไม่ใช่อ่านครั้งเดียวตอน initState
+  final deviceToken = RxnString();
 
   String? _pendingRoute;
+  String? _pendingTaskId;
+  bool _initialized = false;
 
   FcmService._internal();
 
-  Future<void> initialize() async {
+  /// เตรียมระบบ push คืน true เมื่อ Firebase พร้อมรับข้อความจริง
+  ///
+  /// คืน false เมื่อยังไม่มีเน็ตหรือ Firebase ติดตั้งไม่สำเร็จ — ผู้เรียกต้อง
+  /// ไม่ navigate ต่อจาก [handlePendingInitialMessage] ในกรณีนั้น
+  Future<bool> initialize() async {
+    if (_initialized) return true;
+
+    try {
+      await Firebase.initializeApp();
+    } catch (e) {
+      print('[FCM] Firebase init ไม่สำเร็จ: $e');
+      return false;
+    }
+
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     NotificationSettings settings =
@@ -103,11 +206,11 @@ class FcmService {
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional) {
-      _deviceToken = await FirebaseMessaging.instance.getToken();
-      print('[FCM] Device token: $_deviceToken');
+      deviceToken.value = await FirebaseMessaging.instance.getToken();
+      print('[FCM] Device token: ${deviceToken.value}');
 
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-        _deviceToken = newToken;
+        deviceToken.value = newToken;
         print('[FCM] Token refreshed: $newToken');
         _registerCurrentToken();
       });
@@ -123,43 +226,53 @@ class FcmService {
     RemoteMessage? initialMessage =
         await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
-      _pendingRoute = initialMessage.data['route'];
+      final route = initialMessage.data['route'];
+      final taskId = initialMessage.data['task_id'] ?? initialMessage.data['taskId'];
+      _pendingRoute = route is String ? route : null;
+      _pendingTaskId = taskId is String ? taskId : null;
     }
+
+    _initialized = true;
+    return true;
   }
 
   void handlePendingInitialMessage() {
-    if (_pendingRoute != null) {
-      Get.toNamed(_pendingRoute!);
-      _pendingRoute = null;
-    }
+    final route = _pendingRoute;
+    if (route == null) return;
+    final taskId = _pendingTaskId;
+    _pendingRoute = null;
+    _pendingTaskId = null;
+    _openFromPush(route, taskId);
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
     print('[FCM] Foreground message: ${message.messageId}');
-    if (message.notification != null) {
-      print('[FCM] Title: ${message.notification!.title}');
-      print('[FCM] Body: ${message.notification!.body}');
-      _showLocalNotification(
-        id: message.messageId.hashCode,
-        title: message.notification!.title ?? 'RAMPART',
-        body: message.notification!.body ?? '',
-        payload: message.data['route'],
-      );
-    }
+    if (message.notification == null) return;
+    print('[FCM] Title: ${message.notification!.title}');
+    print('[FCM] Body: ${message.notification!.body}');
+    if (!await _notificationsEnabled()) return;
+    await _showLocalNotification(
+      id: message.messageId.hashCode,
+      title: message.notification!.title ?? 'RAMPART',
+      body: message.notification!.body ?? '',
+      payload: _encodePayload(message),
+    );
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    print('[FCM] Notification tapped: ${message.messageId}');
-    String? route = message.data['route'];
-    if (route != null && route.isNotEmpty) {
-      Get.toNamed(route);
-    }
+    final route = message.data['route'];
+    final taskId = message.data['task_id'] ?? message.data['taskId'];
+    _openFromPush(
+      route is String ? route : null,
+      taskId is String ? taskId : null,
+    );
   }
 
   Future<void> _registerCurrentToken() async {
-    if (_deviceToken == null) return;
+    final token = deviceToken.value;
+    if (token == null) return;
     try {
-      await authService.registerFcmToken(_deviceToken!);
+      await authService.registerFcmToken(token);
     } catch (e) {
       print('[FCM] Token registration error: $e');
     }

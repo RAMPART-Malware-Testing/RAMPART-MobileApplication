@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:rampart/components/animated_logo_component.dart';
 import 'package:rampart/services/authService.dart';
 import 'package:rampart/services/fcm_service.dart';
+import 'package:rampart/services/session_guard.dart';
 import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -22,6 +23,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isRecaptchaVerified = false;
 
+  Worker? _tokenWorker;
+
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
@@ -32,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
   void _registerFcmToken() {
-    final token = FcmService().deviceToken;
+    final token = FcmService().deviceToken.value;
     if (token != null) {
       authService.registerFcmToken(token);
     }
@@ -52,6 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
       password: _passwordController.text,
     );
     setState(() => _isLoading = false);
+    
     if (res['success']) {
       _showSnackBar(
         'เข้าสู่ระบบสำเร็จ!',
@@ -65,7 +69,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Get.offAllNamed('/confirm-otp', arguments: {"type": "login"});
     } else {
-      _showSnackBar(res['message'], Colors.red, icon: Icons.check_circle);
+      // ตรวจว่าบัญชีถูกระงับ
+      if (SessionGuard.isBanned(res)) {
+        await SessionGuard.handleBanned();
+        return;
+      }
+      _showSnackBar(res['message'], Colors.red, icon: Icons.error_outline);
     }
   }
 
@@ -94,11 +103,17 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    // Firebase อาจเริ่มช้ากว่าหน้านี้ (หรือเริ่มหลังต่อเน็ตได้) จึงต้องฟังค่า token
+    // ไม่ใช่อ่านครั้งเดียวตอนเปิดหน้า ไม่งั้นจะไม่มีโอกาสลงทะเบียนอีก
+    _tokenWorker = ever<String?>(FcmService().deviceToken, (_) {
+      _registerFcmToken();
+    });
     _registerFcmToken();
   }
 
   @override
   void dispose() {
+    _tokenWorker?.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -137,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     letterSpacing: 2,
                     shadows: [
                       Shadow(
-                        color: _cyanColor.withOpacity(0.5),
+                        color: _cyanColor.withValues(alpha: 0.5),
                         blurRadius: 20,
                       ),
                     ],
@@ -162,17 +177,17 @@ class _LoginScreenState extends State<LoginScreen> {
         color: _cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 20,
             spreadRadius: 2,
           ),
           BoxShadow(
-            color: _cyanColor.withOpacity(0.1),
+            color: _cyanColor.withValues(alpha: 0.1),
             blurRadius: 30,
             spreadRadius: -5,
           ),
@@ -276,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
             hintText: hint,
             hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor, fontSize: 14),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.05),
+            fillColor: Colors.white.withValues(alpha: 0.05),
             prefixIcon: Icon(icon, color: _cyanColor, size: 20),
             suffixIcon: isPassword
                 ? IconButton(
@@ -284,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       _obscurePassword
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined,
-                      color: _cyanColor.withOpacity(0.7),
+                      color: _cyanColor.withValues(alpha: 0.7),
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
@@ -292,11 +307,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 : null,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
           ),
         ),
@@ -312,13 +327,13 @@ class _LoginScreenState extends State<LoginScreen> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: _isRecaptchaVerified
-              ? Colors.green.withOpacity(0.1)
-              : Colors.white.withOpacity(0.05),
+              ? Colors.green.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _isRecaptchaVerified
                 ? Colors.green
-                : _cyanColor.withOpacity(0.5),
+                : _cyanColor.withValues(alpha: 0.5),
             width: 2,
           ),
         ),
@@ -355,7 +370,7 @@ class _LoginScreenState extends State<LoginScreen> {
         gradient: LinearGradient(colors: [_primaryColor, _cyanColor]),
         boxShadow: [
           BoxShadow(
-            color: _cyanColor.withOpacity(0.3),
+            color: _cyanColor.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),

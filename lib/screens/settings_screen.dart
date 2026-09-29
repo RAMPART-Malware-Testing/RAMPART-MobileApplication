@@ -1,90 +1,120 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
-import '../theme/app_theme.dart';
+import 'package:intl/intl.dart';
+import 'package:rampart/models/profile.dart';
+import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/profile_service.dart';
+import 'package:rampart/services/tab_refresh_bus.dart';
+import 'package:rampart/theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final _storage = const FlutterSecureStorage();
 
+  RampartProfile? _profile;
+  bool _loadingProfile = true;
   bool _notificationsEnabled = true;
-  bool _darkModeEnabled = true;
+  bool _loggingOut = false;
 
-  // ใช้สีจาก Theme
-  Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
-  Color get _cardColor => Theme.of(context).cardColor;
-  Color get _textColor => Theme.of(context).colorScheme.onSurface;
-  Color get _cyanColor =>
-      Theme.of(context).extension<CustomColors>()!.cyanColor;
-  Color get _blueColor =>
-      Theme.of(context).extension<CustomColors>()!.blueColor;
-  Color get _hintColor =>
-      Theme.of(context).extension<CustomColors>()!.hintColor;
+  @override
+  void initState() {
+    super.initState();
+    TabRefreshBus.addListener(_onTabSelected);
+    _loadSettings();
+    _loadProfile();
+  }
 
-  
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.logout, color: Colors.red),
-            const SizedBox(width: 12),
-            Text(
-              'ออกจากระบบ',
-              style: TextStyle(fontFamily: 'Kanit', 
-                fontWeight: FontWeight.w700,
-                color: _textColor,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'คุณต้องการออกจากระบบใช่หรือไม่?',
-          style: TextStyle(fontFamily: 'Kanit', 
-            color: _hintColor,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'ยกเลิก',
-              style: TextStyle(fontFamily: 'Kanit', 
-                color: _hintColor,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Get.offAllNamed('/login');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              'ออกจากระบบ',
-              style: TextStyle(fontFamily: 'Kanit', 
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+  @override
+  void dispose() {
+    TabRefreshBus.removeListener(_onTabSelected);
+    super.dispose();
+  }
+
+  /// ผู้ใช้เพิ่งกดแท็บ Settings — ProfileService จะยิงเซิร์ฟเวอร์ใหม่เฉพาะตอนที่แคช
+  /// ครบ 4 วินาทีแล้วเท่านั้น และถ้าไม่มีเน็ตจะคืนโปรไฟล์ที่บันทึกไว้ในดิสก์
+  void _onTabSelected() {
+    if (TabRefreshBus.currentIndex != TabRefreshBus.settingsTab) return;
+    _loadProfile();
+  }
+
+  Future<void> _loadSettings() async {
+    final notifStr = await _storage.read(key: 'notif_enabled');
+
+    setState(() {
+      _notificationsEnabled = notifStr != 'false';
+    });
+  }
+
+  Future<void> _loadProfile({bool force = false}) async {
+    // แสดง cache ทันทีถ้ามี แล้วค่อยอัปเดตจาก API
+    final cached = ProfileService.instance.cached;
+    if (cached != null) {
+      setState(() {
+        _profile = cached;
+        _loadingProfile = false;
+      });
+    }
+
+    final result = await ProfileService.instance.getProfile(force: force);
+    if (!mounted) return;
+
+    setState(() {
+      if (result.success && result.profile != null) {
+        _profile = result.profile;
+      }
+      _loadingProfile = false;
+    });
+  }
+
+  /// ค่านี้ถูกอ่านฝั่ง FcmService ตอนจะแสดงการแจ้งเตือนจริง (ทั้ง isolate หลัก
+  /// และ isolate เบื้องหลัง) จึงไม่ต้องส่งต่อไปที่ไหนอีก
+  Future<void> _toggleNotifications(bool value) async {
+    setState(() => _notificationsEnabled = value);
+    await _storage.write(key: 'notif_enabled', value: value.toString());
+  }
+
+  Future<void> _navigateToProfileEdit() async {
+    final result = await Get.toNamed('/profile-edit');
+    if (result is RampartProfile) {
+      setState(() => _profile = result);
+    }
+  }
+
+  void _showComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('ฟีเจอร์นี้กำลังอยู่ระหว่างการพัฒนา', style: TextStyle(fontFamily: 'Kanit')),
+        behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _buildLogoutDialog(),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() => _loggingOut = true);
+      await AuthService().clearAuthData();
+      if (!mounted) return;
+      Get.offAllNamed('/login');
+    }
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    // created_at มาจากเซิร์ฟเวอร์เป็น UTC ต้องแปลงเป็นเวลาท้องถิ่นก่อนแสดง
+    final formatter = DateFormat('d MMMM yyyy', 'th');
+    return formatter.format(date.toLocal());
   }
 
   @override
@@ -97,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             end: Alignment.bottomRight,
             colors: [
               const Color(0xFF0f172a),
-              _backgroundColor,
+              Theme.of(context).scaffoldBackgroundColor,
               const Color(0xFF1e293b),
             ],
           ),
@@ -126,18 +156,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildHeader() {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ShaderMask(
           shaderCallback: (bounds) {
             return LinearGradient(
-              colors: [_cyanColor, _blueColor],
+              colors: [customColors.cyanColor, customColors.blueColor],
             ).createShader(bounds);
           },
-          child: Text(
+          child: const Text(
             'ตั้งค่า',
-            style: TextStyle(fontFamily: 'Kanit', 
+            style: TextStyle(
+              fontFamily: 'Kanit',
               fontSize: 28,
               fontWeight: FontWeight.w900,
               color: Colors.white,
@@ -147,9 +179,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 8),
         Text(
           'จัดการบัญชีและการตั้งค่า',
-          style: TextStyle(fontFamily: 'Kanit', 
+          style: TextStyle(
+            fontFamily: 'Kanit',
             fontSize: 14,
-            color: _hintColor,
+            color: customColors.hintColor,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -158,96 +191,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildProfileCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1.5,
+    final customColors = Theme.of(context).extension<CustomColors>()!;
+
+    if (_loadingProfile && _profile == null) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: customColors.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-          ),
-          BoxShadow(
-            color: _cyanColor.withOpacity(0.1),
-            blurRadius: 30,
-            spreadRadius: -5,
-          ),
-        ],
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final avatarUrl = ProfileService.resolveAvatarUrl(_profile?.avatarUrl);
+    final username = _profile?.username ?? 'ผู้ใช้';
+    final email = _profile?.email ?? '';
+    final role = _profile?.roleLabel ?? '';
+    final createdAt = _profile?.createdAt;
+
+    return InkWell(
+      onTap: _navigateToProfileEdit,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: customColors.cardBackground,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20),
+            BoxShadow(
+              color: customColors.cyanColor.withValues(alpha: 0.1),
+              blurRadius: 30,
+              spreadRadius: -5,
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: customColors.cyanColor.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+              ),
+              child: ClipOval(
+                child: avatarUrl != null
+                    ? Image.network(
+                        avatarUrl,
+                        fit: BoxFit.cover,
+                        cacheWidth: (60 * MediaQuery.devicePixelRatioOf(context)).round(),
+                        cacheHeight: (60 * MediaQuery.devicePixelRatioOf(context)).round(),
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (context, error, stackTrace) => _buildAvatarFallback(username),
+                      )
+                    : _buildAvatarFallback(username),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    username,
+                    style: const TextStyle(
+                      fontFamily: 'Kanit',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (email.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      email,
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 13,
+                        color: customColors.hintColor,
+                      ),
+                    ),
+                  ],
+                  if (role.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      role,
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 11,
+                        color: customColors.cyanColor,
+                      ),
+                    ),
+                  ],
+                  if (createdAt != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'เข้าร่วมเมื่อ ${_formatDate(createdAt)}',
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 10,
+                        color: customColors.hintColor,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(Icons.edit_outlined, color: customColors.cyanColor),
+          ],
+        ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_cyanColor, _blueColor],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                'A',
-                style: TextStyle(fontFamily: 'Kanit', 
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+    );
+  }
+
+  Widget _buildAvatarFallback(String username) {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
+    final initial = username.isNotEmpty ? username[0].toUpperCase() : '?';
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [customColors.cyanColor, customColors.blueColor],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            fontFamily: 'Kanit',
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Analyst User',
-                  style: TextStyle(fontFamily: 'Kanit', 
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: _textColor,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'analyst@rampart.security',
-                  style: TextStyle(fontFamily: 'Kanit', 
-                    fontSize: 13,
-                    color: _hintColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: () {},
-            icon: Icon(
-              Icons.edit_outlined,
-              color: _cyanColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSettingsSection() {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'ทั่วไป',
-          style: TextStyle(fontFamily: 'Kanit', 
+          style: TextStyle(
+            fontFamily: 'Kanit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: _textColor,
+            color: Colors.white,
           ),
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.person_outline,
+          title: 'แก้ไขโปรไฟล์',
+          subtitle: 'จัดการข้อมูลส่วนตัวของคุณ',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: _navigateToProfileEdit,
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.lock_reset,
+          title: 'เปลี่ยนรหัสผ่าน',
+          subtitle: 'ตั้งรหัสผ่านใหม่สำหรับบัญชีนี้',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: () => Get.toNamed('/reset-password'),
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.history,
+          title: 'ประวัติการเข้าสู่ระบบ',
+          subtitle: 'ดูรายการเข้าสู่ระบบล่าสุด',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: () => Get.toNamed('/activity-history', arguments: 'login'),
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.download_outlined,
+          title: 'ประวัติการดาวน์โหลด',
+          subtitle: 'ดูรายการไฟล์ที่ดาวน์โหลด',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: () => Get.toNamed('/activity-history', arguments: 'download'),
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.help_outline,
+          title: 'ช่วยเหลือและวิธีการใช้งาน',
+          subtitle: 'คู่มือและคำถามที่พบบ่อย',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: () => Get.toNamed('/help'),
         ),
         const SizedBox(height: 12),
         _buildSettingCard(
@@ -256,50 +395,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle: 'รับการแจ้งเตือนเมื่อการวิเคราะห์เสร็จสิ้น',
           trailing: Switch(
             value: _notificationsEnabled,
-            onChanged: (value) {
-              setState(() {
-                _notificationsEnabled = value;
-              });
-            },
-            activeColor: _cyanColor,
+            onChanged: _toggleNotifications,
+            activeColor: customColors.cyanColor,
           ),
-        ),
-        const SizedBox(height: 12),
-        _buildSettingCard(
-          icon: Icons.dark_mode_outlined,
-          title: 'โหมดมืด',
-          subtitle: 'เปิดใช้งานธีมสีมืด',
-          trailing: Switch(
-            value: _darkModeEnabled,
-            onChanged: (value) {
-              setState(() {
-                _darkModeEnabled = value;
-              });
-            },
-            activeColor: _cyanColor,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildSettingCard(
-          icon: Icons.language_outlined,
-          title: 'ภาษา',
-          subtitle: 'ไทย',
-          trailing: Icon(
-            Icons.chevron_right,
-            color: _hintColor,
-          ),
-          onTap: () {},
-        ),
-        const SizedBox(height: 12),
-        _buildSettingCard(
-          icon: Icons.security_outlined,
-          title: 'ความปลอดภัย',
-          subtitle: 'จัดการรหัสผ่านและการเข้าถึง',
-          trailing: Icon(
-            Icons.chevron_right,
-            color: _hintColor,
-          ),
-          onTap: () {},
         ),
       ],
     );
@@ -312,31 +410,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required Widget trailing,
     VoidCallback? onTap,
   }) {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _cardColor,
+          color: customColors.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _cyanColor.withOpacity(0.15),
+                color: customColors.cyanColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                color: _cyanColor,
-                size: 20,
-              ),
+              child: Icon(icon, color: customColors.cyanColor, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -345,18 +438,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(fontFamily: 'Kanit', 
+                    style: const TextStyle(
+                      fontFamily: 'Kanit',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _textColor,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(fontFamily: 'Kanit', 
+                    style: TextStyle(
+                      fontFamily: 'Kanit',
                       fontSize: 12,
-                      color: _hintColor,
+                      color: customColors.hintColor,
                     ),
                   ),
                 ],
@@ -373,12 +468,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'เกี่ยวกับ',
-          style: TextStyle(fontFamily: 'Kanit', 
+          style: TextStyle(
+            fontFamily: 'Kanit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
-            color: _textColor,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 12),
@@ -392,14 +488,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: Icons.article_outlined,
           title: 'เงื่อนไขการใช้งาน',
           value: '',
-          onTap: () {},
+          onTap: _showComingSoon,
         ),
         const SizedBox(height: 12),
         _buildInfoCard(
           icon: Icons.privacy_tip_outlined,
           title: 'นโยบายความเป็นส่วนตัว',
           value: '',
-          onTap: () {},
+          onTap: _showComingSoon,
         ),
       ],
     );
@@ -411,102 +507,157 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String value,
     VoidCallback? onTap,
   }) {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _cardColor,
+          color: customColors.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.1),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         ),
         child: Row(
           children: [
-            Icon(
-              icon,
-              color: _cyanColor,
-              size: 20,
-            ),
+            Icon(icon, color: customColors.cyanColor, size: 20),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(fontFamily: 'Kanit', 
+                style: const TextStyle(
+                  fontFamily: 'Kanit',
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: _textColor,
+                  color: Colors.white,
                 ),
               ),
             ),
             if (value.isNotEmpty)
               Text(
                 value,
-                style: TextStyle(fontFamily: 'Kanit', 
+                style: TextStyle(
+                  fontFamily: 'Kanit',
                   fontSize: 13,
-                  color: _hintColor,
+                  color: customColors.hintColor,
                 ),
               ),
             if (onTap != null)
-              Icon(
-                Icons.chevron_right,
-                color: _hintColor,
-                size: 20,
-              ),
+              Icon(Icons.chevron_right, color: customColors.hintColor, size: 20),
           ],
         ),
       ),
     );
   }
 
-Widget _buildLogoutButton() {
+  Widget _buildLogoutButton() {
     return Container(
       width: double.infinity,
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [
-            Colors.red.shade600,
-            Colors.red.shade400,
-          ],
+          colors: [Colors.red.shade600, Colors.red.shade400],
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.withOpacity(0.3),
+            color: Colors.red.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ElevatedButton(
-        onPressed: _handleLogout,
+        onPressed: _loggingOut ? null : _handleLogout,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: Colors.transparent,
           elevation: 0,
           shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.logout, size: 22),
-            const SizedBox(width: 12),
-            Text(
-              'ออกจากระบบ',
-              style: TextStyle(fontFamily: 'Kanit', 
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
+        child: _loggingOut
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.logout, size: 22),
+                  SizedBox(width: 12),
+                  Text(
+                    'ออกจากระบบ',
+                    style: TextStyle(
+                      fontFamily: 'Kanit',
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildLogoutDialog() {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
+    return AlertDialog(
+      backgroundColor: customColors.cardBackground,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.logout, color: Colors.red),
+          SizedBox(width: 12),
+          Text(
+            'ออกจากระบบ',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
             ),
-          ],
+          ),
+        ],
+      ),
+      content: Text(
+        'คุณต้องการออกจากระบบใช่หรือไม่?',
+        style: TextStyle(
+          fontFamily: 'Kanit',
+          color: customColors.hintColor,
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(
+            'ยกเลิก',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              color: customColors.hintColor,
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text(
+            'ออกจากระบบ',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

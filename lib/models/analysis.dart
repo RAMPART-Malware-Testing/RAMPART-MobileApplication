@@ -607,6 +607,10 @@ class AnalysisHistoryItem {
   final double? capeScore;
   final RampartAiScore? rampartAiScore;
 
+  /// endpoint `dashboard/reports` ส่ง `uploaded_by: {username, avatar_url}` มาให้
+  /// รายงานสาธารณะ ส่วน `history` ไม่ส่ง field นี้
+  final String? uploadedByUsername;
+
   AnalysisHistoryItem({
     required this.aid,
     required this.taskId,
@@ -626,10 +630,12 @@ class AnalysisHistoryItem {
     this.mobsfScore,
     this.capeScore,
     this.rampartAiScore,
+    this.uploadedByUsername,
   });
 
   factory AnalysisHistoryItem.fromJson(Map<String, dynamic> json) {
     final report = _asMap(json['report']);
+    final uploadedBy = _asMap(json['uploaded_by']);
     return AnalysisHistoryItem(
       aid: _asString(json['aid']) ?? '',
       taskId: _asString(json['task_id']) ?? '',
@@ -651,6 +657,7 @@ class AnalysisHistoryItem {
       rampartAiScore: report?['rampart_ai_score'] == null
           ? null
           : RampartAiScore.fromJson(report?['rampart_ai_score']),
+      uploadedByUsername: _asString(uploadedBy?['username']),
     );
   }
 

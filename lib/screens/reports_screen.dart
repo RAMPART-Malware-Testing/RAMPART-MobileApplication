@@ -5,6 +5,9 @@ import 'package:get/get.dart';
 
 import '../models/analysis.dart';
 import '../services/analysis_service.dart';
+import '../services/report_download_service.dart';
+import '../services/session_guard.dart';
+import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
 
 class _FilterOption {
@@ -62,22 +65,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Pagination? _pagination;
   bool _loading = true;
   bool _loadingMore = false;
+
+  /// รีเฟรชเงียบเวลากดแท็บ — แยกจาก [_loading] เพราะต้องไม่ล้างรายการเดิม แต่ยังต้อง
+  /// บอกผู้ใช้ให้รู้ว่ากำลังยิงใหม่ ไม่งั้นการกดแท็บดูเหมือนไม่มีอะไรเกิดขึ้น
+  bool _refreshing = false;
+
+  /// ผู้ใช้กดแท็บขณะที่คำขอเดิมยังค้างอยู่ — เก็บไว้ยิงต่อเมื่อคำขอเดิมเสร็จ
+  /// เดิมกดแล้ว `return` ทิ้งทันที กดกี่ครั้งก็ไม่มีผลจนกว่าคำขอเดิมจะเสร็จ
+  bool _pendingTabRefresh = false;
   String? _error;
   String _selectedStatus = '';
   String _selectedFileType = '';
   String _search = '';
   String _sortField = 'created_at';
   int _sortDirection = -1;
+  final Set<String> _downloading = {};
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    TabRefreshBus.addListener(_onTabSelected);
     _loadFirstPage();
   }
 
   @override
   void dispose() {
+    TabRefreshBus.removeListener(_onTabSelected);
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -93,13 +107,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  Future<void> _loadFirstPage() async {
-    if (_scrollController.hasClients) {
+  /// ผู้ใช้เพิ่งกดแท็บ Reports
+  ///
+  /// รีเฟรชแบบเงียบ (ไม่ล้างรายการเดิม) แต่ยังขึ้นแถบบาง ๆ ให้เห็นว่ากำลังยิงใหม่ —
+  /// เดิมไม่มีสัญญาณใด ๆ เลย ผู้ใช้จึงเหมือนกดไม่ได้ผล แม้คำขอจะยิงออกไปแล้ว
+  /// ส่วนจะใช้แคชในหน่วยความจำหรือยิงใหม่ ปล่อยให้ `TabCache` (อายุ 4 วินาที) ตัดสิน
+  void _onTabSelected() {
+    if (TabRefreshBus.currentIndex != TabRefreshBus.reportsTab) return;
+    // คำขอเดิมยังค้าง — Dio รอได้ถึง 30 วินาที ถ้าทิ้งการกดไปเฉย ๆ ผู้ใช้จะ
+    // กดซ้ำอีกกี่ครั้งก็ยังไม่มีผล จำไว้ยิงต่อเมื่อคำขอเดิมเสร็จแทน
+    if (_loading || _loadingMore) {
+      _pendingTabRefresh = true;
+      return;
+    }
+    _loadFirstPage(silent: true);
+  }
+
+  /// [force] = ผู้ใช้สั่งเอง (ดึงลง/ปุ่มลองใหม่) ข้ามแคช 4 วินาที
+  /// [silent] = ไม่ล้างรายการเดิมถ้าดึงใหม่ไม่สำเร็จ
+  Future<void> _loadFirstPage({bool force = false, bool silent = false}) async {
+    if (!silent && _scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
     setState(() {
-      _loading = true;
-      _error = null;
+      if (silent) {
+        _refreshing = true;
+      } else {
+        _loading = true;
+        _error = null;
+      }
     });
 
     final page = await _service.getHistory(
@@ -110,12 +146,36 @@ class _ReportsScreenState extends State<ReportsScreen> {
       fileType: _selectedFileType,
       sortField: _sortField,
       sortDirection: _sortDirection,
+      force: force,
     );
     if (!mounted) return;
 
+    // token ยังไม่หมดอายุแต่ผู้ใช้ไม่มีในฐานข้อมูลแล้ว — กดลองใหม่ไม่มีทางสำเร็จ
+    // ต้องล้าง session และให้ล็อกใหม่ ไม่งั้นค้างเป็นหน้าจอ error ที่กู้ไม่ได้
+    if (!page.success && (page.status == 401 || page.status == 403)) {
+      setState(() {
+        _loading = false;
+        _refreshing = false;
+      });
+      Get.snackbar(
+        'ต้องเข้าสู่ระบบใหม่',
+        page.message.isNotEmpty ? page.message : 'บัญชีนี้ไม่มีอยู่แล้ว',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AnalysisColors.failed.withValues(alpha: 0.9),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      );
+      await SessionGuard.handleSessionDead();
+      return;
+    }
+
     setState(() {
       _loading = false;
+      _refreshing = false;
       if (!page.success) {
+        // ของเดิมที่แสดงอยู่ยังมีค่ากว่า error — ไม่ทับด้วยหน้าจอว่าง
+        if (silent && _items.isNotEmpty) return;
         _items = const [];
         _pagination = null;
         _error = page.message.isNotEmpty
@@ -124,8 +184,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
       } else {
         _items = page.items;
         _pagination = page.pagination;
+        _error = null;
       }
     });
+
+    // ปลดบัสที่กดแท็บไว้ระหว่างรอ — กดหลายครั้งรวมเป็นคำขอเดียว
+    if (_pendingTabRefresh) {
+      _pendingTabRefresh = false;
+      _loadFirstPage(silent: true);
+    }
   }
 
   Future<void> _loadNextPage() async {
@@ -151,6 +218,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _pagination = page.pagination;
       }
     });
+
+    // ผู้ใช้อาจกดแท็บระหว่างที่เลื่อนโหลดหน้าถัดไปอยู่ — ปลดบัสนั้นตรงนี้
+    if (_pendingTabRefresh) {
+      _pendingTabRefresh = false;
+      _loadFirstPage(silent: true);
+    }
   }
 
   void _onSearchChanged(String value) {
@@ -181,6 +254,64 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     });
     _loadFirstPage();
+  }
+
+  Future<void> _downloadReport(AnalysisHistoryItem report) async {
+    if (report.md5 == null) return;
+
+    final toolList = report.toolList;
+    final tool = toolList.isNotEmpty ? toolList.first : 'virustotal';
+
+    setState(() => _downloading.add(report.aid));
+
+    try {
+      final result = await ReportDownloadService.instance.download(
+        tool: tool,
+        md5: report.md5!,
+        fileName: report.fileName,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _downloading.remove(report.aid));
+
+      if (result.success && result.path != null) {
+        Get.snackbar(
+          'ดาวน์โหลดสำเร็จ',
+          'บันทึกไฟล์ที่: ${result.path}',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AnalysisColors.completed.withValues(alpha: 0.9),
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        Get.snackbar(
+          'ดาวน์โหลดล้มเหลว',
+          result.message.isNotEmpty
+              ? result.message
+              : 'ไม่สามารถดาวน์โหลดรายงานได้',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: AnalysisColors.failed.withValues(alpha: 0.9),
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 4),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _downloading.remove(report.aid));
+
+      Get.snackbar(
+        'ดาวน์โหลดล้มเหลว',
+        'เกิดข้อผิดพลาด: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: AnalysisColors.failed.withValues(alpha: 0.9),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 4),
+      );
+    }
   }
 
   void _openItem(AnalysisHistoryItem item) {
@@ -313,198 +444,223 @@ class _ReportsScreenState extends State<ReportsScreen> {
               color: AnalysisColors.textSecondary,
             ),
           ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _searchController,
-            onChanged: _onSearchChanged,
-            onSubmitted: (_) {
-              _searchDebounce?.cancel();
-              _loadFirstPage();
-            },
-            style: const TextStyle(fontFamily: 'Kanit', color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'ค้นหาด้วยชื่อไฟล์ หรือ Task ID...',
-              hintStyle: const TextStyle(
-                fontFamily: 'Kanit',
-                color: AnalysisColors.textMuted,
-              ),
-              prefixIcon: const Icon(Icons.search, color: AnalysisColors.cyan),
-              suffixIcon: _search.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'ล้างคำค้นหา',
-                      icon: const Icon(
-                        Icons.close,
-                        color: AnalysisColors.textSecondary,
-                      ),
-                      onPressed: () {
-                        _searchController.clear();
-                        _onSearchChanged('');
-                      },
-                    ),
-              filled: true,
-              fillColor: AnalysisColors.surface.withValues(alpha: 0.8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AnalysisColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AnalysisColors.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AnalysisColors.cyan),
-              ),
+          const SizedBox(height: 14),
+          _buildSearchField(),
+          const SizedBox(height: 10),
+          _buildFilterBar(),
+          // สัญญาณว่ากดแท็บแล้วกำลังยิงใหม่ — เหมือนแถบบาง ๆ ที่ Dashboard ใช้
+          // ปรากฏเฉพาะตอนคำขอค้างอยู่เท่านั้น ไม่มี ticker ค้างตอนว่าง (R2)
+          if (_refreshing) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: AnalysisColors.cyan,
+              backgroundColor: Color(0x2200E5FF),
             ),
-          ),
-          const SizedBox(height: 12),
-          _buildFilterSection(
-            'สถานะ',
-            _statusFilters,
-            _selectedStatus,
-            _selectStatus,
-          ),
-          const SizedBox(height: 10),
-          _buildFileTypeFilters(),
-          const SizedBox(height: 10),
-          _buildSortFilters(),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildFilterSection(
-    String label,
-    List<_FilterOption> options,
-    String selected,
-    ValueChanged<String> onSelected,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Kanit',
-            fontSize: 11,
-            color: AnalysisColors.textSecondary,
-          ),
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      onChanged: _onSearchChanged,
+      onSubmitted: (_) {
+        _searchDebounce?.cancel();
+        _loadFirstPage();
+      },
+      style: const TextStyle(fontFamily: 'Kanit', color: Colors.white),
+      decoration: InputDecoration(
+        hintText: 'ค้นหาด้วยชื่อไฟล์ หรือ Task ID...',
+        hintStyle: const TextStyle(
+          fontFamily: 'Kanit',
+          color: AnalysisColors.textMuted,
         ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 7,
-          runSpacing: 7,
-          children: [
-            for (final option in options)
-              _filterChip(
-                option.label,
-                selected == option.value,
-                () => onSelected(option.value),
+        prefixIcon: const Icon(Icons.search, color: AnalysisColors.cyan),
+        suffixIcon: _search.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'ล้างคำค้นหา',
+                icon: const Icon(
+                  Icons.close,
+                  color: AnalysisColors.textSecondary,
+                ),
+                onPressed: () {
+                  _searchController.clear();
+                  _onSearchChanged('');
+                },
               ),
-          ],
+        filled: true,
+        fillColor: AnalysisColors.surface.withValues(alpha: 0.8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AnalysisColors.border),
         ),
-      ],
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AnalysisColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AnalysisColors.cyan),
+        ),
+      ),
     );
   }
 
-  Widget _buildFileTypeFilters() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'ประเภทไฟล์',
-          style: TextStyle(
-            fontFamily: 'Kanit',
-            fontSize: 11,
-            color: AnalysisColors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 7,
-          runSpacing: 7,
-          children: [
-            _filterChip(
-              'ทั้งหมด',
-              _selectedFileType.isEmpty,
-              () => _selectFileType(''),
-            ),
-            for (final type in _fileTypes)
-              _filterChip(
-                type.toUpperCase(),
-                _selectedFileType == type,
-                () => _selectFileType(type),
-              ),
-          ],
-        ),
-      ],
+  /// ตัวกรองทั้งสามแบบรวมอยู่ในแถวเดียวที่เลื่อนแนวนอนได้
+  ///
+  /// เดิมกระจายเป็นชิป 17 ปุ่ม (สถานะ 5 + ประเภทไฟล์ 8 + เรียงตาม 4) กินพื้นที่
+  /// เกือบครึ่งจอทั้งที่ค่าส่วนใหญ่ยังเป็นค่าเริ่มต้น — ตอนนี้แต่ละปุ่มบอกค่าที่ใช้อยู่
+  /// ในตัว แล้วเปิดเมนูให้เลือก ส่วนปุ่มที่ถูกเปลี่ยนจะติดสีให้เห็นว่ากรองอยู่
+  Widget _buildFilterBar() {
+    return SizedBox(
+      height: 38,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.zero,
+        children: [
+          _buildStatusPill(),
+          const SizedBox(width: 8),
+          _buildFileTypePill(),
+          const SizedBox(width: 8),
+          _buildSortPill(),
+        ],
+      ),
     );
   }
 
-  Widget _buildSortFilters() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 8, right: 8),
-          child: Text(
-            'เรียงตาม:',
+  Widget _buildStatusPill() {
+    final current = _statusFilters.firstWhere(
+      (option) => option.value == _selectedStatus,
+      orElse: () => _statusFilters.first,
+    );
+    return PopupMenuButton<_FilterOption>(
+      tooltip: 'กรองตามสถานะ',
+      color: AnalysisColors.surfaceElevated,
+      onSelected: (option) => _selectStatus(option.value),
+      itemBuilder: (context) => [
+        for (final option in _statusFilters)
+          _menuItem(option, option.value == _selectedStatus),
+      ],
+      child: _pillShell(
+        text: 'สถานะ: ${current.label}',
+        isActive: _selectedStatus.isNotEmpty,
+      ),
+    );
+  }
+
+  Widget _buildFileTypePill() {
+    return PopupMenuButton<_FilterOption>(
+      tooltip: 'กรองตามประเภทไฟล์',
+      color: AnalysisColors.surfaceElevated,
+      onSelected: (option) => _selectFileType(option.value),
+      itemBuilder: (context) => [
+        _menuItem(const _FilterOption('', 'ทั้งหมด'), _selectedFileType.isEmpty),
+        for (final type in _fileTypes)
+          _menuItem(
+            _FilterOption(type, type.toUpperCase()),
+            _selectedFileType == type,
+          ),
+      ],
+      child: _pillShell(
+        text: 'ประเภท: ${_selectedFileType.isEmpty ? 'ทั้งหมด' : _selectedFileType.toUpperCase()}',
+        isActive: _selectedFileType.isNotEmpty,
+      ),
+    );
+  }
+
+  /// ปุ่มเรียงลำดับ — แตะรายการที่เลือกอยู่อีกครั้งเพื่อสลับทิศทาง (พฤติกรรมเดิม)
+  Widget _buildSortPill() {
+    final current = _sortOptions.firstWhere(
+      (option) => option.value == _sortField,
+      orElse: () => _sortOptions.first,
+    );
+    final arrow = _sortDirection == 1 ? '↑' : '↓';
+
+    return PopupMenuButton<_FilterOption>(
+      tooltip: 'เรียงลำดับ',
+      color: AnalysisColors.surfaceElevated,
+      onSelected: _selectSort,
+      itemBuilder: (context) => [
+        for (final option in _sortOptions)
+          _menuItem(
+            option,
+            option.value == _sortField,
+            suffix: option.value == _sortField
+                ? '$arrow ${_sortDirection == 1 ? 'เก่าสุดก่อน' : 'ใหม่สุดก่อน'}'
+                : null,
+          ),
+      ],
+      child: _pillShell(
+        text: 'เรียงตาม: ${current.label} $arrow',
+        isActive: _sortField != 'created_at' || _sortDirection != -1,
+      ),
+    );
+  }
+
+  PopupMenuItem<_FilterOption> _menuItem(
+    _FilterOption option,
+    bool selected, {
+    String? suffix,
+  }) {
+    return PopupMenuItem<_FilterOption>(
+      value: option,
+      height: 40,
+      child: Row(
+        children: [
+          Icon(
+            selected ? Icons.check : Icons.check_box_outline_blank,
+            size: 16,
+            color: selected ? AnalysisColors.cyan : AnalysisColors.textMuted,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            suffix == null ? option.label : '${option.label} · $suffix',
             style: TextStyle(
               fontFamily: 'Kanit',
-              fontSize: 11,
-              color: AnalysisColors.textSecondary,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AnalysisColors.cyan : AnalysisColors.textPrimary,
             ),
           ),
-        ),
-        Expanded(
-          child: Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              for (final option in _sortOptions)
-                _filterChip(
-                  _sortField == option.value
-                      ? '${option.label} ${_sortDirection == 1 ? '↑' : '↓'}'
-                      : option.label,
-                  _sortField == option.value,
-                  () => _selectSort(option),
-                ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _filterChip(String label, bool selected, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected
-              ? AnalysisColors.cyan.withValues(alpha: 0.16)
-              : AnalysisColors.surface.withValues(alpha: 0.8),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected
-                ? AnalysisColors.cyan.withValues(alpha: 0.5)
-                : AnalysisColors.border,
-          ),
+  Widget _pillShell({required String text, required bool isActive}) {
+    final color = isActive ? AnalysisColors.cyan : AnalysisColors.textSecondary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: isActive
+            ? AnalysisColors.cyan.withValues(alpha: 0.14)
+            : AnalysisColors.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isActive
+              ? AnalysisColors.cyan.withValues(alpha: 0.5)
+              : AnalysisColors.border,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Kanit',
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: selected
-                ? AnalysisColors.cyan
-                : AnalysisColors.textSecondary,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            text,
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
           ),
-        ),
+          const SizedBox(width: 4),
+          Icon(Icons.expand_more, size: 16, color: color),
+        ],
       ),
     );
   }
@@ -531,7 +687,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (_error != null) return _buildError(_error!);
     if (_items.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _loadFirstPage,
+        onRefresh: () => _loadFirstPage(force: true),
         color: AnalysisColors.cyan,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -557,7 +713,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     }
     return RefreshIndicator(
-      onRefresh: _loadFirstPage,
+      onRefresh: () => _loadFirstPage(force: true),
       color: AnalysisColors.cyan,
       child: ListView.builder(
         controller: _scrollController,
@@ -578,26 +734,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  /// หน้าจอ error ต้องดึงลงรีเฟรชได้ด้วย — เดิมเป็น `Center` ธรรมดาที่ไม่เลื่อนได้
+  /// ผู้ใช้จึงกู้จากหน้านี้ได้ทางเดียวคือกดปุ่มเล็ก ๆ "ลองใหม่"
   Widget _buildError(String message) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off, size: 50, color: AnalysisColors.failed),
-            const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Kanit',
-                color: AnalysisColors.textSecondary,
-              ),
+    return RefreshIndicator(
+      onRefresh: () => _loadFirstPage(force: true),
+      color: AnalysisColors.cyan,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+        children: [
+          SizedBox(height: MediaQuery.sizeOf(context).height * 0.15),
+          const Icon(Icons.cloud_off, size: 50, color: AnalysisColors.failed),
+          const SizedBox(height: 14),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'Kanit',
+              color: AnalysisColors.textSecondary,
             ),
-            const SizedBox(height: 14),
-            OutlinedButton(
-              onPressed: _loadFirstPage,
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: OutlinedButton(
+              onPressed: () => _loadFirstPage(force: true),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AnalysisColors.cyan,
               ),
@@ -606,8 +767,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 style: TextStyle(fontFamily: 'Kanit'),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -618,6 +779,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final tier = score == null
         ? AnalysisScoreTier.fromRisk(report.riskLevel)
         : AnalysisScoreTier.fromScore(score);
+    final canDownload =
+        report.status.toLowerCase() == 'success' && report.md5 != null;
+    final isDownloading = _downloading.contains(report.aid);
+
     return InkWell(
       onTap: () => _openItem(report),
       borderRadius: BorderRadius.circular(16),
@@ -680,10 +845,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: AnalysisColors.textSecondary,
-                ),
+                if (canDownload) ...[
+                  IconButton(
+                    icon: isDownloading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AnalysisColors.cyan,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.download_outlined,
+                            color: AnalysisColors.cyan,
+                          ),
+                    iconSize: 20,
+                    onPressed: isDownloading
+                        ? null
+                        : () => _downloadReport(report),
+                    tooltip: 'ดาวน์โหลดรายงาน',
+                  ),
+                ] else
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AnalysisColors.textSecondary,
+                  ),
               ],
             ),
             const SizedBox(height: 12),

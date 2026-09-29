@@ -46,11 +46,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   bool _validatePassword(String password) {
-    if (password.length < 6) return false;
+    if (password.length < 8) return false;
     bool hasUppercase = password.contains(RegExp(r'[A-Z]'));
     bool hasLowercase = password.contains(RegExp(r'[a-z]'));
+    bool hasDigit = password.contains(RegExp(r'[0-9]'));
     bool hasSpecialCharacters = password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'));
-    return hasUppercase && hasLowercase && hasSpecialCharacters;
+    return hasUppercase && hasLowercase && hasDigit && hasSpecialCharacters;
   }
 
   void _handleRegister() async {
@@ -125,7 +126,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: 2,
-                    shadows: [Shadow(color: _cyanColor.withOpacity(0.5), blurRadius: 20)],
+                    shadows: [Shadow(color: _cyanColor.withValues(alpha: 0.5), blurRadius: 20)],
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -146,10 +147,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, spreadRadius: 2),
-          BoxShadow(color: _cyanColor.withOpacity(0.1), blurRadius: 30, spreadRadius: -5),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2),
+          BoxShadow(color: _cyanColor.withValues(alpha: 0.1), blurRadius: 30, spreadRadius: -5),
         ],
       ),
       child: Form(
@@ -188,7 +189,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               isObscure: _obscurePassword,
               onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
               validator: (v) => (v == null || !_validatePassword(v)) 
-                  ? 'รหัสผ่านต้องมี 6 ตัวขึ้นไป, พิมพ์เล็ก-ใหญ่ และอักษรพิเศษ' 
+                  ? 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษอย่างน้อยอย่างละ 1 ตัว' 
                   : null,
             ),
             const SizedBox(height: 16),
@@ -246,16 +247,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
             hintText: hint,
             hintStyle: TextStyle(fontFamily: 'Kanit', color: _hintColor, fontSize: 14),
             filled: true,
-            fillColor: Colors.white.withOpacity(0.05),
+            fillColor: Colors.white.withValues(alpha: 0.05),
             prefixIcon: Icon(icon, color: _cyanColor, size: 20),
             suffixIcon: isPassword
                 ? IconButton(
-                    icon: Icon(isObscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: _cyanColor.withOpacity(0.7)),
+                    icon: Icon(isObscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: _cyanColor.withValues(alpha: 0.7)),
                     onPressed: onToggleVisibility,
                   )
                 : null,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
           ),
         ),
       ],
@@ -269,9 +270,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _isRecaptchaVerified ? Colors.green.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          color: _isRecaptchaVerified ? Colors.green.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _isRecaptchaVerified ? Colors.green : _cyanColor.withOpacity(0.5), width: 2),
+          border: Border.all(color: _isRecaptchaVerified ? Colors.green : _cyanColor.withValues(alpha: 0.5), width: 2),
         ),
         child: Row(
           children: [
@@ -296,7 +297,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(colors: [_primaryColor, _cyanColor]),
-        boxShadow: [BoxShadow(color: _cyanColor.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 4))],
       ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleRegister,

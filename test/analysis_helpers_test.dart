@@ -182,4 +182,74 @@ void main() {
       expect(page.pagination?.hasNext, isFalse);
     });
   });
+  group('deriveSequentialPipelineStatuses', () {
+    test('รอบแรก: Stage 1 เหลือง Stage 2-3 ฟ้า แม้ backend mark ล้ำหน้า', () {
+      final d = deriveSequentialPipelineStatuses(
+        virustotal: ToolRunStatus.waiting,
+        mobsf: ToolRunStatus.running,
+        cape: ToolRunStatus.running,
+        rampartAi: ToolRunStatus.waiting,
+        gemini: ToolRunStatus.waiting,
+      );
+      expect(d.virustotal, ToolRunStatus.running);
+      expect(d.mobsf, ToolRunStatus.waiting);
+      expect(d.cape, ToolRunStatus.waiting);
+      expect(d.rampartAi, ToolRunStatus.waiting);
+      expect(d.engine, ToolRunStatus.waiting);
+      expect(d.gemini, ToolRunStatus.waiting);
+    });
+
+    test('Stage 1 จบ Stage 2 ขึ้นเหลือง Stage 3 ยังฟ้า', () {
+      final d = deriveSequentialPipelineStatuses(
+        virustotal: ToolRunStatus.completed,
+        mobsf: ToolRunStatus.running,
+        cape: ToolRunStatus.waiting,
+        rampartAi: ToolRunStatus.waiting,
+        gemini: ToolRunStatus.waiting,
+      );
+      expect(d.virustotal, ToolRunStatus.completed);
+      expect(d.engine, ToolRunStatus.running);
+      expect(d.mobsf, ToolRunStatus.running);
+      expect(d.cape, ToolRunStatus.waiting);
+      expect(d.gemini, ToolRunStatus.waiting);
+    });
+
+    test('Stage 2 จบ Stage 3 ขึ้นเหลืองเอง', () {
+      final d = deriveSequentialPipelineStatuses(
+        virustotal: ToolRunStatus.completed,
+        mobsf: ToolRunStatus.completed,
+        cape: ToolRunStatus.skipped,
+        rampartAi: ToolRunStatus.completed,
+        gemini: ToolRunStatus.waiting,
+      );
+      expect(d.engine, ToolRunStatus.completed);
+      expect(d.gemini, ToolRunStatus.running);
+    });
+
+    test('จบทั้งหมดเขียวหมด ไม่มีอะไรค้างเหลือง', () {
+      final d = deriveSequentialPipelineStatuses(
+        virustotal: ToolRunStatus.completed,
+        mobsf: ToolRunStatus.completed,
+        cape: ToolRunStatus.completed,
+        rampartAi: ToolRunStatus.completed,
+        gemini: ToolRunStatus.completed,
+      );
+      expect(d.engine, ToolRunStatus.completed);
+      expect(d.gemini, ToolRunStatus.completed);
+    });
+
+    test('task ล้มเหลวแล้วไม่บังคับให้ stage ที่ไม่ได้รันขึ้นเหลือง', () {
+      final d = deriveSequentialPipelineStatuses(
+        virustotal: ToolRunStatus.failed,
+        mobsf: ToolRunStatus.waiting,
+        cape: ToolRunStatus.waiting,
+        rampartAi: ToolRunStatus.waiting,
+        gemini: ToolRunStatus.waiting,
+        stillRunning: false,
+      );
+      expect(d.virustotal, ToolRunStatus.failed);
+      expect(d.engine, ToolRunStatus.waiting);
+      expect(d.gemini, ToolRunStatus.waiting);
+    });
+  });
 }

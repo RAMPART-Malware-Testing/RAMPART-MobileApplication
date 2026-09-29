@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/core/config.dart';
+import 'package:rampart/services/offline_cache.dart';
+import 'package:rampart/services/tab_cache.dart';
+import 'package:rampart/services/session_guard.dart';
 // import 'package:rampart/services/auth_interceptor.dart';
 
 class AuthService {
@@ -63,19 +66,33 @@ class AuthService {
       );
       if (res.data != null && res.data['success'] == true) {
         if (res.data['data']['bypass_otp'] == true) {
-          String accessToken = res.data['data']['access_token'].toString();
-          await _storage.write(key: 'session_token', value: accessToken);
-          await _storage.write(
-            key: 'data',
-            value: jsonEncode(res.data['data']['data'] ?? {}),
-          );
-          await _storage.write(key: 'session_type', value: "access");
-          if (res.data['data']['refresh_token'] != null) {
-            await _storage.write(
+          final data = res.data['data'];
+          String accessToken = data['access_token'].toString();
+          
+          // รวม Keystore writes พร้อมกันลดรอบการเข้าถึง
+          final writes = <Future<void>>[
+            _storage.write(key: 'session_token', value: accessToken),
+            _storage.write(
+              key: 'data',
+              value: jsonEncode(data['data'] ?? {}),
+            ),
+            _storage.write(key: 'session_type', value: "access"),
+          ];
+          
+          if (data['refresh_token'] != null) {
+            writes.add(_storage.write(
               key: 'refresh_token',
-              value: res.data['data']['refresh_token'].toString(),
-            );
+              value: data['refresh_token'].toString(),
+            ));
           }
+          
+          // backend อาจคืน device_token / deviceToken / deiveToken — รองรับทุกแบบ
+          final devToken = data['device_token'] ?? data['deviceToken'] ?? data['deiveToken'];
+          if (devToken != null && devToken.toString().isNotEmpty) {
+            writes.add(_storage.write(key: 'deivetoken', value: devToken.toString()));
+          }
+          
+          await Future.wait(writes);
         } else if (res.data['data']['token'] != null) {
           await _storage.write(
             key: 'session_token',
@@ -96,8 +113,8 @@ class AuthService {
     String? userAgent,
     String? ip,
   }) async {
-    var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null || sesstion_type != "login_confirm") {
+    var sessionType = await _storage.read(key: 'session_type');
+    if (sessionType == null || sessionType != "login_confirm") {
       return {
         "success": false,
         "status": 404,
@@ -116,17 +133,29 @@ class AuthService {
         final data = res.data['data'];
         if (data != null) {
           String accessToken = data['access_token'] ?? data['token'] ?? '';
-          String refreshToken = data['refresh_token'] ?? '';
+          
           if (accessToken.isNotEmpty) {
-            await _storage.write(key: 'session_token', value: accessToken);
+            final writes = <Future<void>>[
+              _storage.write(key: 'session_token', value: accessToken),
+              _storage.write(
+                key: 'data',
+                value: jsonEncode(data['data'] ?? {}),
+              ),
+              _storage.write(key: 'session_type', value: "access"),
+            ];
+            
+            String refreshToken = data['refresh_token'] ?? '';
             if (refreshToken.isNotEmpty) {
-              await _storage.write(key: 'refresh_token', value: refreshToken);
+              writes.add(_storage.write(key: 'refresh_token', value: refreshToken));
             }
-            await _storage.write(
-              key: 'data',
-              value: jsonEncode(data['data'] ?? {}),
-            );
-            await _storage.write(key: 'session_type', value: "access");
+            
+            // backend คืน deiveToken (สะกดผิด) เป็นตัว trusted device
+            final devToken = data['deiveToken'] ?? data['device_token'] ?? data['deviceToken'];
+            if (devToken != null && devToken.toString().isNotEmpty) {
+              writes.add(_storage.write(key: 'deivetoken', value: devToken.toString()));
+            }
+            
+            await Future.wait(writes);
           }
         }
       }
@@ -146,7 +175,6 @@ class AuthService {
         '/api/auth/register',
         data: {'username': username, 'email': email, 'password': password},
       );
-      print(res.data);
       if (res.data != null && res.data['success'] == true) {
         final data = res.data['data'];
 
@@ -168,8 +196,8 @@ class AuthService {
     required String token,
     required String otp,
   }) async {
-    var sesstion_type = await _storage.read(key: 'session_type');
-    if (sesstion_type == null || sesstion_type != "register_confirm") {
+    var sessionType = await _storage.read(key: 'session_type');
+    if (sessionType == null || sessionType != "register_confirm") {
       return {
         "success": false,
         "status": 404,
@@ -213,6 +241,8 @@ class AuthService {
     }
   }
 
+  /// ยืนยัน OTP แล้วตั้งรหัสผ่านใหม่ — ใช้กับเส้นทาง "ลืมรหัสผ่าน" ของคนที่ยังไม่ล็อกอิน
+  /// จึงต้องมี `session_type` เป็น forgot_passwd_confirm จากขั้นตอนขอ OTP ก่อน
   Future<Map<String, dynamic>> resetPasswordConfirm({
     required String token,
     required String otp,
@@ -235,6 +265,56 @@ class AuthService {
     } catch (e) {
       return _errorResponse;
     }
+  }
+
+  /// ตั้งรหัสผ่านใหม่ให้บัญชีที่ล็อกอินอยู่ โดยใช้ access token เป็นหลักฐานยืนยันตัวตน
+  ///
+  /// เป็น endpoint เดียวกับ [resetPassword] แต่คนละโหมด: ถ้าส่ง `token` (type=access)
+  /// มาพร้อม `newPasswd` เซิร์ฟเวอร์จะเปลี่ยนรหัสให้ทันที ไม่ต้องยืนยัน OTP ทางอีเมล
+  /// (โหมดขอ OTP ใช้เมื่อส่งแค่ email ซึ่งเป็นเส้นทางของคนที่ล็อกอินไม่ได้)
+  ///
+  /// ไม่แตะ token/PIN ที่เก็บไว้ — ผู้ใช้ยังอยู่ในเซสชันเดิมหลังเปลี่ยนรหัสผ่าน
+  Future<Map<String, dynamic>> changePassword(String newPassword) async {
+    final token = await _storage.read(key: 'session_token');
+    if (token == null || token.isEmpty || token == 'null') {
+      return {
+        'success': false,
+        'status': 'NO_SESSION',
+        'message': 'ไม่พบเซสชัน กรุณาเข้าสู่ระบบใหม่',
+      };
+    }
+
+    try {
+      final res = await _http.post(
+        '/api/auth/reset-passwd',
+        data: {'token': token, 'newPasswd': newPassword},
+      );
+      if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
+      return _errorResponse;
+    } catch (e) {
+      final status = _failureStatus(e);
+      return {
+        'success': false,
+        'status': status,
+        'message': status == 0
+            ? 'Connect Server Error!!!'
+            : _messageFrom(e, 'ไม่สามารถเปลี่ยนรหัสผ่านได้'),
+      };
+    }
+  }
+
+  /// ข้อความจากเซิร์ฟเวอร์เมื่อคำขอล้มเหลว (backend ส่ง `detail` ของ FastAPI มาด้วย)
+  String _messageFrom(Object error, String fallback) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        for (final key in const ['message', 'detail']) {
+          final value = data[key];
+          if (value is String && value.isNotEmpty) return value;
+        }
+      }
+    }
+    return fallback;
   }
 
   /// แยกสาเหตุความล้มเหลวของคำขอ refresh:
@@ -305,11 +385,12 @@ class AuthService {
   /// โหลดข้อมูลผู้ใช้จาก API เพื่อยืนยันสิทธิ์เจ้าของรายงานก่อนแสดงตัวเลือก privacy
   Future<Map<String, dynamic>> getProfile() async {
     final token = await _storage.read(key: 'session_token');
-    if (token == null || token.isEmpty) return _errorResponse;
+    // ข้าม token ที่เป็น null หรือ string 'null' (ตรงกับ analysis_service.dart)
+    if (token == null || token.isEmpty || token == 'null') return _errorResponse;
     try {
       final res = await _http.post('/api/profile', data: {'token': token});
-      if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
-      return _errorResponse;
+      if (res.data is! Map) return _errorResponse;
+      return Map<String, dynamic>.from(res.data as Map);
     } catch (_) {
       return _errorResponse;
     }
@@ -343,6 +424,10 @@ class AuthService {
   static bool isDeadSession(Map<String, dynamic> res) =>
       deadSessionStatuses.contains(res['status']);
 
+  /// ตรวจว่าบัญชีถูกระงับ — delegate ไปยัง SessionGuard เพื่อไม่ซ้ำ string literal
+  static bool isAccountBanned(Map<String, dynamic>? res) =>
+      SessionGuard.isBanned(res);
+
   /// ล้างเฉพาะ token ของขั้นตอนยืนยัน OTP ที่ค้างอยู่
   /// ไม่แตะ PIN หรือ refresh_token เพราะผู้ใช้อาจมี session ที่ใช้ได้อยู่แล้ว
   Future<void> clearStaleSession() async {
@@ -367,6 +452,10 @@ class AuthService {
       _storage.delete(key: 'is_authenticated'),
       _storage.delete(key: 'pin_wrong_count'),
     ]);
+    // ข้อมูลที่แคชไว้เป็นของผู้ใช้คนเดิม — ต้องหายไปพร้อมกับ token
+    // ไม่งั้นคนที่ล็อกอินคนถัดไปบนเครื่องเดียวกันจะเห็นประวัติของคนก่อน
+    await OfflineCache.instance.clearAll();
+    TabCache.instance.clear();
   }
 }
 

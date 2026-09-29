@@ -25,7 +25,19 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
   double _uploadProgress = 0;
   String? _error;
 
-  Future<void> _pickFile() async {
+  /// แตะครั้งเดียวจบ: เลือกไฟล์แล้วส่งวิเคราะห์ทันที
+  ///
+  /// เดิมแยกเป็นสองขั้น (แตะช่องเลือกไฟล์ แล้วค่อยกดปุ่ม "อัปโหลดและวิเคราะห์")
+  /// ซึ่งผู้ใช้ต้องกดสองครั้งทั้งที่เป็นเจตนาเดียวกัน
+  Future<void> _pickAndUpload() async {
+    if (_isUploading) return;
+    final picked = await _pickFile();
+    if (picked == null || !mounted) return;
+    await _startUpload();
+  }
+
+  /// เปิดหน้าต่างเลือกไฟล์ — คืนข้อมูลไฟล์ที่เลือก หรือ null เมื่อยกเลิก/เลือกไม่ได้
+  Future<SelectedFileInfo?> _pickFile() async {
     try {
       if (Get.isRegistered<PINService>()) {
         Get.find<PINService>().suppressLockBriefly();
@@ -34,40 +46,35 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
         type: FileType.any,
         allowMultiple: false,
       );
-      if (!mounted || result == null) return;
+      if (!mounted || result == null) return null;
 
       final picked = result.files.single;
       final path = picked.path;
-      if (path == null) return;
+      if (path == null) return null;
       if (picked.size > AnalysisService.maxUploadBytes) {
         setState(
           () => _error = 'ขนาดไฟล์เกิน 1GB กรุณาเลือกไฟล์ที่มีขนาดเล็กกว่า',
         );
-        return;
+        return null;
       }
 
+      final info = SelectedFileInfo(
+        name: picked.name,
+        path: path,
+        size: picked.size,
+        extension: picked.extension,
+      );
       setState(() {
         _selectedFile = File(path);
-        _fileInfo = SelectedFileInfo(
-          name: picked.name,
-          path: path,
-          size: picked.size,
-          extension: picked.extension,
-        );
+        _fileInfo = info;
         _error = null;
       });
+      return info;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return null;
       setState(() => _error = 'เกิดข้อผิดพลาดในการเลือกไฟล์: $error');
+      return null;
     }
-  }
-
-  Future<void> _uploadFile() async {
-    if (_selectedFile == null || _fileInfo == null) {
-      await _pickFile();
-      if (!mounted || _selectedFile == null || _fileInfo == null) return;
-    }
-    await _startUpload();
   }
 
   Future<void> _startUpload() async {
@@ -241,7 +248,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
       child: Column(
         children: [
           InkWell(
-            onTap: _isUploading ? null : _pickFile,
+            onTap: _isUploading ? null : _pickAndUpload,
             borderRadius: BorderRadius.circular(14),
             child: Container(
               width: double.infinity,
@@ -267,7 +274,9 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    _fileInfo?.name ?? 'คลิกหรือลากไฟล์มาวางที่นี่',
+                    _isUploading
+                        ? (_fileInfo?.name ?? 'กำลังส่งไฟล์...')
+                        : _fileInfo?.name ?? 'แตะเพื่อเลือกไฟล์',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -280,9 +289,12 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
                   ),
                   const SizedBox(height: 7),
                   Text(
-                    _fileInfo == null
-                        ? 'รองรับไฟล์ทุกประเภท สูงสุด 1GB'
+                    _isUploading
+                        ? 'กำลังส่งไปวิเคราะห์ ไม่ต้องกดอะไรเพิ่ม'
+                        : _fileInfo == null
+                        ? 'เลือกไฟล์แล้วระบบส่งวิเคราะห์ทันที สูงสุด 1GB'
                         : 'ขนาด ${_fileInfo!.displaySize}',
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: 'Kanit',
                       fontSize: 12,
@@ -332,7 +344,7 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'อัปโหลด ${(_uploadProgress * 100).toStringAsFixed(0)}%',
+              'ส่งไฟล์แล้ว ${(_uploadProgress * 100).toStringAsFixed(0)}%',
               style: const TextStyle(
                 fontFamily: 'Kanit',
                 fontSize: 13,
@@ -341,25 +353,6 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: ElevatedButton.icon(
-              onPressed: _isUploading ? null : _uploadFile,
-              icon: Icon(_isUploading ? Icons.hourglass_top : Icons.upload),
-              label: Text(
-                _isUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดและวิเคราะห์',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AnalysisColors.cyan,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

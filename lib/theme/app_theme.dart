@@ -10,6 +10,8 @@ class AppTheme {
   static const Color cyanAccent = Color(0xFF00BCD4);
   static const Color blueAccent = Color(0xFF2196F3);
 
+  static const Color splashBackground = Color(0xFF0f172a);
+
   static ThemeData get lightTheme {
     return FlexThemeData.light(
       colors: const FlexSchemeColor(
@@ -27,7 +29,7 @@ class AppTheme {
       subThemesData: const FlexSubThemesData(
         blendOnLevel: 20,
         blendOnColors: false,
-        useTextTheme: true,
+        useMaterial3Typography: true,
         useM2StyleDividerInM3: true,
         alignedDropdown: true,
         useInputDecoratorThemeInDialogs: true,
@@ -39,6 +41,17 @@ class AppTheme {
       // สำหรับ Dark Theme ที่คุณใช้ในเว็บ
       scaffoldBackground: const Color(0xFF0f172a),
       // cardColor: const Color(0x0FFFFFFF),
+      // ต้องมี CustomColors ทุกธีม ไม่งั้นจอที่อ่านค่าผ่าน
+      // Theme.of(context).extension<CustomColors>()! จะ throw ตอนวาด
+      extensions: <ThemeExtension<dynamic>>{
+        CustomColors(
+          backgroundColor: background,
+          cardBackground: const Color(0x0A000000),
+          hintColor: Colors.blueGrey.shade700,
+          cyanColor: cyanAccent,
+          blueColor: blueAccent,
+        ),
+      },
     );
   }
 
@@ -58,7 +71,7 @@ class AppTheme {
       blendLevel: 15,
       subThemesData: const FlexSubThemesData(
         blendOnLevel: 30,
-        useTextTheme: true,
+        useMaterial3Typography: true,
         useM2StyleDividerInM3: true,
         alignedDropdown: true,
         useInputDecoratorThemeInDialogs: true,

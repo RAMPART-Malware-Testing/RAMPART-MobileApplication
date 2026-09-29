@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/session_guard.dart';
 import '../theme/app_theme.dart';
 
 class ConfirmScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class _ConfirmScreenState extends State<ConfirmScreen>
   bool _isPasswordVisible = false;
   int _activeOTPIndex = 0;
   String? _verificationType;
+  Timer? _lockTimer;
+  int _lockSecondsRemaining = 0;
 
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _primaryColor => Theme.of(context).colorScheme.primary;
@@ -42,6 +45,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
 
   @override
   void dispose() {
+    _lockTimer?.cancel();
     _otpFocusNode.removeListener(_handleOTPFocusChanged);
     _otpController.dispose();
     _otpFocusNode.dispose();
@@ -77,16 +81,19 @@ class _ConfirmScreenState extends State<ConfirmScreen>
   }
 
   bool _validatePassword(String password) {
-    if (password.length < 6) return false;
+    if (password.length < 8) return false;
     bool hasUppercase = password.contains(RegExp(r'[A-Z]'));
     bool hasLowercase = password.contains(RegExp(r'[a-z]'));
+    bool hasDigit = password.contains(RegExp(r'[0-9]'));
     bool hasSpecialCharacters = password.contains(
       RegExp(r'[!@#$%^&*(),.?":{}|<>]'),
     );
-    return hasUppercase && hasLowercase && hasSpecialCharacters;
+    return hasUppercase && hasLowercase && hasDigit && hasSpecialCharacters;
   }
 
   Future<void> _handleVerify() async {
+    if (_lockSecondsRemaining > 0) return;
+    
     final otp = _otpController.text;
 
     if (otp.length != 6) {
@@ -97,7 +104,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
     if (_verificationType == 'forgot-passwd' &&
         !_validatePassword(_passwordController.text)) {
       _showSnackBar(
-        'รหัสผ่านต้องมี 6 ตัวขึ้นไป, มีอักษรพิมพ์เล็ก-ใหญ่ และอักษรพิเศษ',
+        'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักขระพิเศษอย่างน้อยอย่างละ 1 ตัว',
         Colors.redAccent,
       );
       return;
@@ -128,20 +135,80 @@ class _ConfirmScreenState extends State<ConfirmScreen>
         return;
       }
 
-      // server ตอบ HTTP 200 แม้ session ตาย ต้องดู field `status` ไม่ใช่ HTTP code
+      // ตรวจสถานะพิเศษก่อน
+      final status = res['status'];
+      
+      if (SessionGuard.isBanned(res)) {
+        await SessionGuard.handleBanned();
+        return;
+      }
+
       if (AuthService.isDeadSession(res)) {
         await _handleDeadSession();
         return;
       }
 
+      if (status == 'OTP_WRONG') {
+        final attemptsRemaining = res['data']?['attempts_remaining'] as int? ?? 0;
+        _clearOTPFields();
+        _showSnackBar(
+          'รหัส OTP ไม่ถูกต้อง เหลืออีก $attemptsRemaining ครั้ง',
+          Colors.orangeAccent,
+          icon: Icons.warning_amber_rounded,
+        );
+        return;
+      }
+
+      if (status == 'OTP_LOCKED') {
+        final lockedSeconds = res['data']?['locked_seconds_remaining'] as int? ?? 60;
+        _startLockCountdown(lockedSeconds);
+        return;
+      }
+
+      // ถ้า backend ส่ง message มาให้ใช้ข้อความนั้น ไม่งั้นใช้ fallback
+      final message = res['message'];
       _showSnackBar(
-        res['message'] ?? 'เกิดข้อผิดพลาด',
+        (message != null && message.toString().isNotEmpty)
+            ? message.toString()
+            : 'เกิดข้อผิดพลาด',
         Colors.red,
         icon: Icons.error_outline,
       );
     } finally {
       if (mounted && _isLoading) setState(() => _isLoading = false);
     }
+  }
+
+  void _clearOTPFields() {
+    setState(() {
+      _otpController.clear();
+      _activeOTPIndex = 0;
+    });
+    _otpFocusNode.requestFocus();
+  }
+
+  void _startLockCountdown(int seconds) {
+    setState(() {
+      _lockSecondsRemaining = seconds;
+      _isLoading = false;
+    });
+    _otpController.clear();
+    _otpFocusNode.unfocus();
+    
+    _lockTimer?.cancel();
+    _lockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _lockSecondsRemaining--;
+        if (_lockSecondsRemaining <= 0) {
+          timer.cancel();
+          _lockTimer = null;
+        }
+      });
+    });
   }
 
   /// session หมดอายุ/ผิดชนิด/ถูกใช้ไปแล้ว — ล้าง token ที่ค้าง แล้วพากลับหน้า login
@@ -269,6 +336,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
 
   Widget _buildMainCard() {
     final otp = _otpController.text;
+    final isLocked = _lockSecondsRemaining > 0;
 
     return Container(
       padding: const EdgeInsets.all(32),
@@ -279,6 +347,34 @@ class _ConfirmScreenState extends State<ConfirmScreen>
       ),
       child: Column(
         children: [
+          if (isLocked) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_clock, color: Colors.orange, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'กรอกผิดหลายครั้งเกินไป\nกรุณารออีก $_lockSecondsRemaining วินาที',
+                      style: const TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 13,
+                        color: Colors.orange,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           Stack(
             alignment: Alignment.center,
             children: [
@@ -288,6 +384,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
               ),
               Positioned.fill(
                 child: IgnorePointer(
+                  ignoring: isLocked,
                   child: TextField(
                     controller: _otpController,
                     focusNode: _otpFocusNode,
@@ -297,6 +394,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
                     enableSuggestions: false,
                     showCursor: false,
                     cursorWidth: 0,
+                    enabled: !isLocked,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                       LengthLimitingTextInputFormatter(6),
@@ -394,11 +492,13 @@ class _ConfirmScreenState extends State<ConfirmScreen>
   }
 
   Widget _buildSubmitButton() {
+    final isLocked = _lockSecondsRemaining > 0;
+    
     return SizedBox(
       width: double.infinity,
       height: 55,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleVerify,
+        onPressed: (_isLoading || isLocked) ? null : _handleVerify,
         style: ElevatedButton.styleFrom(
           backgroundColor: _primaryColor,
           shape: RoundedRectangleBorder(

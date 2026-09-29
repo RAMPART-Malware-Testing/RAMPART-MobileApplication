@@ -87,9 +87,15 @@ class PINController extends GetxController {
     // ใช้ค่าที่เก็บไว้จริงเป็นหลัก กันตัวนับรีเซ็ตเมื่อปิดแอปแล้วเปิดใหม่
     final persistedWrong = int.tryParse(stored[1] ?? '');
 
-    if (savedPin == null) {
-      savedPin = '123456'; 
-      await _storage.write(key: 'user_pin', value: '123456');
+    // ไม่มี PIN ที่เก็บไว้ = ยังไม่เคยตั้ง PIN → ไม่ควรอยู่หน้า verify
+    // ให้ล้างข้อมูลแล้วกลับไปหน้า login
+    if (savedPin == null || savedPin.isEmpty) {
+      isLoading.value = false;
+      pin.value = '';
+      _showNotice('ไม่พบรหัส PIN กรุณาเข้าสู่ระบบใหม่อีกครั้ง', isError: true);
+      await authService.clearAuthData();
+      Get.offAllNamed('/login');
+      return;
     }
 
     if (pin.value == savedPin) {

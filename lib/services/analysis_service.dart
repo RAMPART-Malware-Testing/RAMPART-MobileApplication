@@ -4,9 +4,13 @@ import 'dart:isolate';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rampart/core/config.dart';
 import 'package:rampart/models/analysis.dart';
+import 'package:rampart/services/network_monitor_service.dart';
+import 'package:rampart/services/offline_cache.dart';
+import 'package:rampart/services/tab_cache.dart';
 
 /// ชั้นเชื่อมต่อระบบวิเคราะห์ไฟล์ของ RAMPART
 ///
@@ -85,6 +89,13 @@ class AnalysisService {
       }
     }
     return fallback;
+  }
+
+  /// คำขอไปไม่ถึงเซิร์ฟเวอร์เลย — บอก NetworkMonitorService ให้แถบออฟไลน์ขึ้นทันที
+  void _reportUnreachable(Object error) {
+    if (NetworkMonitorService.isUnreachable(error)) {
+      NetworkMonitorService().reportUnreachable();
+    }
   }
 
   /// ขอ upload token สำหรับอัปโหลดไฟล์ (อายุ 15 นาที)
@@ -264,6 +275,9 @@ class AnalysisService {
       return TaskStatusResult.failure(_msgNoSession, httpStatus: 401);
     }
 
+    final scope = OfflineCache.scopeFor(token);
+    final cacheKey = 'analysis.task.$taskId';
+
     try {
       final res = await _http.post(
         '/api/analy/v1/task_id',
@@ -272,14 +286,22 @@ class AnalysisService {
 
       final data = res.data;
       if (data is Map) {
-        return TaskStatusResult.fromJson(
+        final result = TaskStatusResult.fromJson(
           Map<String, dynamic>.from(data),
           httpStatus: res.statusCode ?? 200,
         );
+        if (result.success) {
+          unawaited(OfflineCache.instance.put(scope, cacheKey, data));
+        }
+        return result;
       }
       return TaskStatusResult.failure(_msgNetwork);
     } catch (e) {
       final status = _failureStatus(e);
+      if (status == 0) {
+        final cached = await _cachedTask(scope, cacheKey, taskId);
+        if (cached != null) return cached;
+      }
       return TaskStatusResult.failure(
         status == 0
             ? _msgNetwork
@@ -300,13 +322,17 @@ class AnalysisService {
       return ToolReportResult.failure(_msgNoSession, httpStatus: 401);
     }
 
+    final routeKey = AnalysisReport.toolRouteKey(tool);
+    final scope = OfflineCache.scopeFor(token);
+    final cacheKey = 'analysis.tool.$taskId.$routeKey';
+
     try {
       final res = await _http.post(
         '/api/analy/v1/report_target',
         data: {
           'token': token,
           'task_id': taskId,
-          'tool': AnalysisReport.toolRouteKey(tool),
+          'tool': routeKey,
         },
       );
 
@@ -322,11 +348,25 @@ class AnalysisService {
             httpStatus: result.httpStatus,
           );
         }
+        unawaited(OfflineCache.instance.put(scope, cacheKey, data));
         return result;
       }
       return ToolReportResult.failure(_msgNetwork);
     } catch (e) {
       final status = _failureStatus(e);
+      if (status == 0) {
+        final cached = await OfflineCache.instance.get(scope, cacheKey);
+        if (cached != null && cached.payload is Map) {
+          final result = ToolReportResult.fromJson(
+            Map<String, dynamic>.from(cached.payload as Map),
+            httpStatus: 200,
+          );
+          if (result.success) {
+            debugPrint('[cache] รายงาน $routeKey ของ $taskId ใช้ข้อมูลที่บันทึกไว้');
+            return result;
+          }
+        }
+      }
       return ToolReportResult.failure(
         status == 0
             ? _msgNetwork
@@ -336,7 +376,27 @@ class AnalysisService {
     }
   }
 
+  /// อ่านสถานะงานที่เคยโหลดสำเร็จ คืน null เมื่อไม่มีของเก่าหรือของเก่าใช้ไม่ได้
+  Future<TaskStatusResult?> _cachedTask(
+    String scope,
+    String cacheKey,
+    String taskId,
+  ) async {
+    final cached = await OfflineCache.instance.get(scope, cacheKey);
+    if (cached == null || cached.payload is! Map) return null;
+    final result = TaskStatusResult.fromJson(
+      Map<String, dynamic>.from(cached.payload as Map),
+      httpStatus: 200,
+    );
+    if (!result.success) return null;
+    debugPrint('[cache] สถานะงาน $taskId ใช้ข้อมูลที่บันทึกไว้');
+    return result;
+  }
+
   /// ประวัติการวิเคราะห์ของผู้ใช้ (มี pagination)
+  ///
+  /// [force] = true เมื่อผู้ใช้สั่งดึงเอง (ดึงลงเพื่อรีเฟรช/ปุ่มลองใหม่) — ข้ามแคชใน
+  /// หน่วยความจำ ส่วนการกดแท็บใช้ค่าเริ่มต้น ซึ่งยิงใหม่เฉพาะตอนแคชครบ [TabCache.ttl]
   Future<AnalysisHistoryPage> getHistory({
     int page = 1,
     int limit = 10,
@@ -345,6 +405,7 @@ class AnalysisService {
     String? fileType,
     String? sortField,
     int sortDirection = -1,
+    bool force = false,
   }) async {
     final token = await _accessToken();
     if (token == null) {
@@ -363,21 +424,79 @@ class AnalysisService {
       body[sortField] = sortDirection >= 0 ? 1 : -1;
     }
 
+    // แยก key ตามชุดพารามิเตอร์ของคำค้น เพื่อไม่ให้ผลของการค้นหาหนึ่งไป
+    // ทับของอีกคำค้นหนึ่งใน cache
+    final scope = OfflineCache.scopeFor(token);
+    final cacheKey = OfflineCache.normaliseKey([
+      'analysis.history',
+      page,
+      limit,
+      s,
+      status,
+      fileType,
+      sortField,
+      sortDirection,
+    ]);
+    final memoryKey = '$scope|$cacheKey';
+
+    if (!force) {
+      final cached = TabCache.instance.fresh<AnalysisHistoryPage>(memoryKey);
+      if (cached != null) {
+        debugPrint(
+          '[cache] ประวัติการวิเคราะห์ยังไม่ครบ ${TabCache.ttl.inSeconds} วินาที — ใช้ของเดิม',
+        );
+        return cached;
+      }
+
+      // รู้แน่อยู่แล้วว่าเน็ตไม่ขึ้น — ข้ามการยิงที่จะรอจน timeout แล้วหยิบของเก่ามาใช้เลย
+      if (!NetworkMonitorService().isOnline.value) {
+        final stale = await _cachedHistory(scope, cacheKey);
+        if (stale != null) return stale;
+      }
+    }
+
     try {
       final res = await _http.post('/api/analy/v1/history', data: body);
 
       final data = res.data;
       if (data is Map) {
-        return AnalysisHistoryPage.fromJson(Map<String, dynamic>.from(data));
+        final result =
+            AnalysisHistoryPage.fromJson(Map<String, dynamic>.from(data));
+        if (result.success) {
+          unawaited(OfflineCache.instance.put(scope, cacheKey, data));
+          TabCache.instance.store(memoryKey, result);
+        }
+        return result;
       }
       return AnalysisHistoryPage.failure(_msgNetwork);
     } catch (e) {
       final status = _failureStatus(e);
+      _reportUnreachable(e);
+      if (status == 0) {
+        final cached = await _cachedHistory(scope, cacheKey);
+        if (cached != null) return cached;
+      }
       return AnalysisHistoryPage.failure(
         status == 0 ? _msgNetwork : _messageFrom(e, 'ไม่สามารถดึงประวัติได้'),
         status: status,
       );
     }
+  }
+
+  /// ประวัติชุดเดิมที่เคยโหลดสำเร็จและบันทึกไว้ในดิสก์ — คืน null ถ้าไม่มีหรือใช้ไม่ได้
+  Future<AnalysisHistoryPage?> _cachedHistory(
+    String scope,
+    String cacheKey,
+  ) async {
+    final cached = await OfflineCache.instance.get(scope, cacheKey);
+    if (cached == null || cached.payload is! Map) return null;
+    final result = AnalysisHistoryPage.fromJson(
+      Map<String, dynamic>.from(cached.payload as Map),
+    );
+    if (!result.success) return null;
+    TabCache.instance.noteSync(cached.savedAt);
+    debugPrint('[cache] ประวัติการวิเคราะห์ใช้ข้อมูลที่บันทึกไว้');
+    return result;
   }
 
   /// เปลี่ยน public/private ของรายงาน

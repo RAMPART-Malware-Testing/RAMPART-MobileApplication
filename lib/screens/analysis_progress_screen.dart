@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../models/analysis.dart';
 import '../services/analysis_service.dart';
+import '../services/network_monitor_service.dart';
 import '../widgets/analysis_components.dart';
 
 class AnalysisProgressScreen extends StatefulWidget {
@@ -21,8 +22,10 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   final String _taskId = (Get.arguments as String?)?.trim() ?? '';
 
   Timer? _timer;
+  Worker? _netWorker;
   bool _requestInFlight = false;
   bool _finished = false;
+  bool _offline = false;
   TaskStatusResult? _last;
   String? _transientError;
 
@@ -41,18 +44,42 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   @override
   void initState() {
     super.initState();
-    _poll();
-    _timer = Timer.periodic(_pollInterval, (_) => _poll());
+    // ออฟไลน์คือปิดการ poll ไปก่อน แล้วค่อยกลับมา poll ต่อเมื่อเน็ตกลับมา
+    // ไม่เช่นนั้นจะยิงคำขอที่ล้มเหลวว่างเปล่าทุก 2.5 วินาที
+    _netWorker = ever<bool>(NetworkMonitorService().isOnline, (online) {
+      if (online) {
+        _startPolling();
+      } else {
+        _pausePolling();
+      }
+    });
+    _startPolling();
   }
 
   @override
   void dispose() {
+    _netWorker?.dispose();
     _timer?.cancel();
     super.dispose();
   }
 
+  void _startPolling() {
+    if (_finished || _taskId.isEmpty) return;
+    if (_timer != null) return;
+    if (mounted) setState(() => _offline = false);
+    _poll();
+    _timer = Timer.periodic(_pollInterval, (_) => _poll());
+  }
+
+  void _pausePolling() {
+    _timer?.cancel();
+    _timer = null;
+    if (mounted) setState(() => _offline = true);
+  }
+
   Future<void> _poll() async {
     if (_finished || _requestInFlight || _taskId.isEmpty) return;
+    if (!NetworkMonitorService().isOnline.value) return;
     _requestInFlight = true;
     final result = await _service.getTaskStatus(_taskId);
     _requestInFlight = false;
@@ -89,13 +116,17 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
       _transientError = null;
       _last = null;
     });
-    _poll();
-    _timer = Timer.periodic(_pollInterval, (_) => _poll());
+    if (!NetworkMonitorService().isOnline.value) {
+      _offline = true;
+      return;
+    }
+    _startPolling();
   }
 
   ToolProgress? _progressFor(String tool) => _last?.progress?.tools[tool];
 
-  ToolRunStatus _statusFor(String tool) {
+  /// สถานะดิบจาก backend (ก่อนบังคับลำดับการแสดง)
+  ToolRunStatus _rawStatusFor(String tool) {
     final progress = _progressFor(tool);
     if (progress != null) return progress.status;
 
@@ -171,6 +202,10 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
                     if (_last?.toolNotes.isNotEmpty ?? false) ...[
                       const SizedBox(height: 16),
                       _buildNotesCard(),
+                    ],
+                    if (_offline) ...[
+                      const SizedBox(height: 12),
+                      _buildOfflineCard(),
                     ],
                     if (_transientError != null) ...[
                       const SizedBox(height: 12),
@@ -252,21 +287,21 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   }
 
   Widget _buildPipeline() {
-    final vtStatus = _statusFor('virustotal');
-    final mobsfStatus = _statusFor('mobsf');
-    final capeStatus = _statusFor('cape');
-    final aiStatus = _statusFor('rampart_ai');
-    final geminiStatus = _statusFor('gemini');
-    final engineStatus = deriveAnalysisStageStatus([
-      mobsfStatus,
-      capeStatus,
-      aiStatus,
-    ]);
+    // สถานะทั้ง pipeline คำนวณเป็นชุดเดียวเพื่อบังคับให้ stage เปิดตามลำดับ —
+    // Stage 1 เหลืองตั้งแต่เปิดหน้า, Stage 2 ฟ้าจน Stage 1 จบ, Stage 3 ฟ้าจน Stage 2 จบ
+    final display = deriveSequentialPipelineStatuses(
+      virustotal: _rawStatusFor('virustotal'),
+      mobsf: _rawStatusFor('mobsf'),
+      cape: _rawStatusFor('cape'),
+      rampartAi: _rawStatusFor('rampart_ai'),
+      gemini: _rawStatusFor('gemini'),
+      stillRunning: !_finished,
+    );
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildConnector([vtStatus, engineStatus, geminiStatus]),
+        _buildConnector([display.virustotal, display.engine, display.gemini]),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -274,14 +309,14 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
               _buildStage(
                 number: 1,
                 title: 'Stage 1 — Initial Triage',
-                status: vtStatus,
-                child: _buildToolCard('virustotal'),
+                status: display.virustotal,
+                child: _buildToolCard('virustotal', display.virustotal),
               ),
               const SizedBox(height: 12),
               _buildStage(
                 number: 2,
                 title: 'Stage 2 — Multi-Engine Analysis',
-                status: engineStatus,
+                status: display.engine,
                 child: Column(
                   children: [
                     const Text(
@@ -293,11 +328,11 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildToolCard('mobsf'),
+                    _buildToolCard('mobsf', display.mobsf),
                     const SizedBox(height: 8),
-                    _buildToolCard('cape'),
+                    _buildToolCard('cape', display.cape),
                     const SizedBox(height: 8),
-                    _buildToolCard('rampart_ai'),
+                    _buildToolCard('rampart_ai', display.rampartAi),
                   ],
                 ),
               ),
@@ -305,9 +340,9 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
               _buildStage(
                 number: 3,
                 title: 'Stage 3 — AI Recommendation',
-                status: geminiStatus,
+                status: display.gemini,
                 inputLabel: _geminiInputLabel(),
-                child: _buildToolCard('gemini'),
+                child: _buildToolCard('gemini', display.gemini),
               ),
             ],
           ),
@@ -402,8 +437,7 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     );
   }
 
-  Widget _buildToolCard(String tool) {
-    final status = _statusFor(tool);
+  Widget _buildToolCard(String tool, ToolRunStatus status) {
     final progress = _progressFor(tool);
     final score = progress?.score;
     final message = _noteFor(tool);
@@ -479,8 +513,8 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
 
   String _geminiInputLabel() {
     final inputs = <String>[];
-    if (_statusFor('mobsf') == ToolRunStatus.completed) inputs.add('MobSF');
-    if (_statusFor('cape') == ToolRunStatus.completed) inputs.add('CAPE');
+    if (_rawStatusFor('mobsf') == ToolRunStatus.completed) inputs.add('MobSF');
+    if (_rawStatusFor('cape') == ToolRunStatus.completed) inputs.add('CAPE');
     return 'Input: ${inputs.isEmpty ? 'None' : inputs.join(' + ')}';
   }
 
@@ -503,6 +537,30 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// แจ้งว่าหยุดรอเพราะไม่มีเน็ต — จะกลับไป poll ต่อเองเมื่อเน็ตกลับมา
+  /// จึงไม่ต้องมีปุ่ม "ลองใหม่" เหมือนการ์ด error ปกติ
+  Widget _buildOfflineCard() {
+    return AnalysisCard(
+      status: ToolRunStatus.running,
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off, size: 18, color: AnalysisColors.textSecondary),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'ขาดการเชื่อมต่อ — กำลังรอสัญญาณเน็ตเพื่ออัปเดตสถานะ',
+              style: TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 12,
+                color: AnalysisColors.textSecondary,
+              ),
+            ),
+          ),
         ],
       ),
     );

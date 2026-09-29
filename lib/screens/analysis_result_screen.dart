@@ -14,11 +14,19 @@ class AnalysisResultScreen extends StatefulWidget {
 }
 
 class _ToolDetailState {
-  const _ToolDetailState({this.loading = false, this.error, this.data});
+  const _ToolDetailState({
+    this.loading = false,
+    this.error,
+    this.data,
+    this.md5,
+    this.fileName,
+  });
 
   final bool loading;
   final String? error;
   final Map<String, dynamic>? data;
+  final String? md5;
+  final String? fileName;
 }
 
 class _ToolScore {
@@ -105,9 +113,36 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
 
     final result = await _service.getToolReport(taskId: _taskId, tool: tool);
     if (!mounted) return;
+
+    // ดึง md5 และ fileName จาก raw report ตามเครื่องมือ
+    String? md5;
+    String? fileName;
+    if (result.success && result.report != null) {
+      final raw = result.report!;
+      switch (AnalysisReport.toolRouteKey(tool)) {
+        case 'virustotal':
+          md5 = _asString(raw['data']?['attributes']?['md5']);
+          break;
+        case 'mobsf':
+          md5 = _asString(raw['md5']);
+          break;
+        case 'cape':
+          md5 = _asString(raw['target']?['file']?['md5']);
+          break;
+        case 'rampartai':
+          md5 = _asString(raw['md5']);
+          break;
+      }
+      fileName = _report?.fileName;
+    }
+
     setState(() {
       _toolDetails[tool] = result.success
-          ? _ToolDetailState(data: result.report)
+          ? _ToolDetailState(
+              data: result.report,
+              md5: md5,
+              fileName: fileName,
+            )
           : _ToolDetailState(
               error: result.message?.isNotEmpty == true
                   ? result.message
@@ -773,9 +808,43 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                   color: AnalysisColors.failed,
                 ),
               )
-            else if (detail?.data != null)
-              _toolSummary(_toolKey(tool), detail!.data!, report)
-            else
+            else if (detail?.data != null) ...[
+              _toolSummary(_toolKey(tool), detail!.data!, report),
+              if (_shouldShowDetailButton(tool)) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Get.toNamed(
+                      '/tool-report',
+                      arguments: {
+                        'taskId': _taskId,
+                        'tool': tool,
+                        'report': detail.data,
+                        'md5': detail.md5 ?? report.md5,
+                        'fileName': detail.fileName ?? report.fileName,
+                      },
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AnalysisColors.cyan,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'ดูรายละเอียดทั้งหมด',
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ] else
               TextButton.icon(
                 onPressed: () => _loadTool(tool),
                 icon: const Icon(Icons.refresh, size: 16),
@@ -814,6 +883,17 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         );
     }
   }
+
+  bool _shouldShowDetailButton(String tool) {
+    final normalised = AnalysisReport.toolRouteKey(tool);
+    return normalised == 'virustotal' ||
+        normalised == 'mobsf' ||
+        normalised == 'cape' ||
+        normalised == 'rampartai';
+  }
+
+  static String? _asString(dynamic v) =>
+      v == null ? null : (v is String ? v : v.toString());
 
   Widget _virusTotalSummary(Map<String, dynamic> data, AnalysisReport report) {
     final stats = _map(
