@@ -1,45 +1,36 @@
 import 'package:flutter/material.dart';
 
+/// โลโก้ RAMPART บนพื้นหลังสีขาว (โลโก้เดิมเป็นตัวอักษรสีขาวล้วน
+/// จึงต้องมีพื้นขาวรองรับ ไม่งั้นจะกลืนกับฉากหลังของแอป)
 class AnimatedLogoComponent extends StatelessWidget {
   final String imagePath;
   final double size;
 
   const AnimatedLogoComponent({
     super.key,
-    this.imagePath = 'assets/images/logo_none_white2.png',
+    this.imagePath = 'assets/images/logo_bg_white.png',
     this.size = 140.0,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: size * 1.15, 
-          height: size * 1.15,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.white.withOpacity(0.8),
-                blurRadius: 30,
-                spreadRadius: 5,
-              ),
-            ],
-          ),
-        ),
-        // ส่วนของตัวโลโก้
-        SizedBox(
-          width: size,
-          height: size,
-          child: Image.asset(
-            imagePath,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-          ),
-        ),
-      ],
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.26),
+      ),
+      child: Image.asset(
+        imagePath,
+        fit: BoxFit.cover,
+        // จำกัดขนาด decode ตามพื้นที่แสดงจริง (R8) — ภาพต้นฉบับ 1024px
+        cacheWidth: (size * dpr).round(),
+        cacheHeight: (size * dpr).round(),
+        filterQuality: FilterQuality.medium,
+      ),
     );
   }
 }

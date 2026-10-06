@@ -12,8 +12,30 @@ class AppTheme {
 
   static const Color splashBackground = Color(0xFF0f172a);
 
+  /// ปุ่มทุกชนิดไม่มีเงา (ทั้งปุ่ม Material ปกติและปุ่มที่กำหนดสไตล์เอง)
+  static ButtonStyle _flatButtonStyle() => ButtonStyle(
+        elevation: const WidgetStatePropertyAll<double>(0),
+        shadowColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+        surfaceTintColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
+      );
+
+  static ThemeData _withoutShadows(ThemeData theme) => theme.copyWith(
+        elevatedButtonTheme: ElevatedButtonThemeData(style: _flatButtonStyle()),
+        filledButtonTheme: FilledButtonThemeData(style: _flatButtonStyle()),
+        outlinedButtonTheme:
+            OutlinedButtonThemeData(style: _flatButtonStyle()),
+        textButtonTheme: TextButtonThemeData(style: _flatButtonStyle()),
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+        ),
+        dialogTheme: const DialogThemeData(elevation: 0),
+        bottomSheetTheme: const BottomSheetThemeData(elevation: 0),
+      );
+
   static ThemeData get lightTheme {
-    return FlexThemeData.light(
+    final theme = FlexThemeData.light(
       colors: const FlexSchemeColor(
         primary: primary,
         primaryContainer: Color(0xFF1e2c39),
@@ -53,10 +75,11 @@ class AppTheme {
         ),
       },
     );
+    return _withoutShadows(theme);
   }
 
   static ThemeData get darkTheme {
-    return FlexThemeData.dark(
+    final theme = FlexThemeData.dark(
       colors: const FlexSchemeColor(
         primary: primary,
         primaryContainer: Color(0xFF1e2c39),
@@ -94,6 +117,7 @@ class AppTheme {
         ),
       },
     );
+    return _withoutShadows(theme);
   }
 }
 

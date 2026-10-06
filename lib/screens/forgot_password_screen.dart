@@ -175,18 +175,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         color: _cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-          BoxShadow(
-            color: _cyanColor.withOpacity(0.1),
-            blurRadius: 30,
-            spreadRadius: -5,
-          ),
-        ],
       ),
       child: Form(
         key: _formKey,
@@ -335,13 +323,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(colors: [_primaryColor, _cyanColor]),
-        boxShadow: [
-          BoxShadow(
-            color: _cyanColor.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleSendOTP,

@@ -1478,7 +1478,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

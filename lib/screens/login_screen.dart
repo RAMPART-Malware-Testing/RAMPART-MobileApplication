@@ -200,18 +200,6 @@ class _LoginScreenState extends State<LoginScreen> {
           color: Colors.white.withValues(alpha: 0.1),
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-          BoxShadow(
-            color: _cyanColor.withValues(alpha: 0.1),
-            blurRadius: 30,
-            spreadRadius: -5,
-          ),
-        ],
       ),
       child: Form(
         key: _formKey,
@@ -389,13 +377,6 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(colors: [_primaryColor, _cyanColor]),
-        boxShadow: [
-          BoxShadow(
-            color: _cyanColor.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: ElevatedButton(
         onPressed: _isLoading ? null : _handleLogin,

@@ -84,7 +84,6 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                                 color: isFilled ? cyanColor : Colors.white.withOpacity(0.3),
                                 width: 1.5,
                               ),
-                              boxShadow: isFilled ? [BoxShadow(color: cyanColor.withOpacity(0.5), blurRadius: 10, spreadRadius: 1)] : [],
                             ),
                           );
                         }),

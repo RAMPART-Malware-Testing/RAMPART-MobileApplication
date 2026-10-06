@@ -26,6 +26,8 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   bool _requestInFlight = false;
   bool _finished = false;
   bool _offline = false;
+  /// poll จบด้วยสถานะล้มเหลวถาวร (ไม่ใช่แค่สะดุดชั่วคราว) — ต้องมีทางไปต่อเสมอ
+  bool _failed = false;
   TaskStatusResult? _last;
   String? _transientError;
 
@@ -85,7 +87,9 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     _requestInFlight = false;
     if (!mounted) return;
 
-    if (!result.success && result.httpStatus == 0) {
+    // ยังไม่สำเร็จและไม่ได้แปลว่า "จบ" (เซิร์ฟเวอร์สะดุด/เซสชันหมดอายุชั่วคราว)
+    // → แสดงการ์ดชั่วคราวแล้ว poll ต่อ ไม่ตรึงหน้าจอทิ้งแบบเดิม
+    if (!result.success && !_isTerminalFailure(result)) {
       setState(() => _transientError = result.message);
       return;
     }
@@ -106,9 +110,23 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
         // ผู้ใช้กดย้อนกลับมาเจอหน้าค้าง — ถอดตัวเองออกจากสแตกแทน
         Navigator.of(context).removeRoute(ModalRoute.of(context)!);
       }
-    } else if (result.isFailed || result.isNotFound) {
-      _stopPolling();
+      return;
     }
+
+    if (result.isFailed || !result.success) {
+      // งานล้มเหลวจริง/ไม่พบงาน — หยุด poll แต่ต้องเหลือทางไปต่อ (ลองใหม่/เปิดรายงาน)
+      _stopPolling();
+      setState(() => _failed = true);
+    }
+  }
+
+  /// ความล้มเหลวถาวร: งานถูกทำเครื่องหมาย failed, ไม่พบงาน, หรือถูกปฏิเสธสิทธิ์
+  /// ส่วน 5xx/timeout/เน็ตสะดุด ถือว่าชั่วคราว — ต้อง poll ต่อเอง
+  bool _isTerminalFailure(TaskStatusResult result) {
+    if (result.success) return result.isFailed;
+    final message = (result.message ?? '').toUpperCase();
+    if (message.contains('TASK_NOT_FOUND')) return true;
+    return const {401, 403, 404}.contains(result.httpStatus);
   }
 
   void _stopPolling() {
@@ -121,6 +139,7 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     _stopPolling();
     _finished = false;
     setState(() {
+      _failed = false;
       _transientError = null;
       _last = null;
     });
@@ -176,8 +195,7 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   }
 
   ToolRunStatus _pageStatus() {
-    if (_finished && (_last?.isFailed ?? false)) return ToolRunStatus.failed;
-    if (_finished && (_last?.isNotFound ?? false)) return ToolRunStatus.failed;
+    if (_finished && _failed) return ToolRunStatus.failed;
     return ToolRunStatus.running;
   }
 
@@ -214,6 +232,10 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
                     if (_offline) ...[
                       const SizedBox(height: 12),
                       _buildOfflineCard(),
+                    ],
+                    if (_failed) ...[
+                      const SizedBox(height: 12),
+                      _buildFailedCard(),
                     ],
                     if (_transientError != null) ...[
                       const SizedBox(height: 12),
@@ -572,6 +594,78 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
         ],
       ),
     );
+  }
+
+  /// งานล้มเหลว/ไม่พบงาน — ต้องไม่ทิ้งผู้ใช้ไว้กับป้ายแดงเฉย ๆ
+  /// (เคสจริง: แจ้งเตือนบอกไม่สำเร็จ แต่รายงานถูกสร้างสำเร็จภายหลัง)
+  Widget _buildFailedCard() {
+    final message = _last?.message;
+    return AnalysisCard(
+      status: ToolRunStatus.failed,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'การวิเคราะห์ไม่สำเร็จ',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AnalysisColors.failed,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            (message != null && message.isNotEmpty && message != 'TASK_NOT_FOUND')
+                ? message
+                : 'ไม่พบงานวิเคราะห์นี้ หรือระบบแจ้งว่าล้มเหลว',
+            style: const TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 12,
+              color: AnalysisColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'หากระบบวิเคราะห์สำเร็จภายหลัง (มีการลองซ้ำ) รายงานจะเปิดได้จากปุ่มด้านล่างหรือแท็บรายงาน',
+            style: TextStyle(
+              fontFamily: 'Kanit',
+              fontSize: 11,
+              color: AnalysisColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: _restartPolling,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AnalysisColors.cyan,
+                ),
+                child: const Text('ลองใหม่',
+                    style: TextStyle(fontFamily: 'Kanit')),
+              ),
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: _openReport,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AnalysisColors.cyan,
+                  foregroundColor: AnalysisColors.background,
+                ),
+                child: const Text('เปิดรายงาน',
+                    style: TextStyle(fontFamily: 'Kanit')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openReport() {
+    Get.toNamed('/analysis-result', arguments: _taskId);
   }
 
   Widget _buildErrorCard() {

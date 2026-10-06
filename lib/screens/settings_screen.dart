@@ -236,14 +236,6 @@ Future<void> _toggleNotifications(bool value) async {
           color: customColors.cardBackground,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20),
-            BoxShadow(
-              color: customColors.cyanColor.withValues(alpha: 0.1),
-              blurRadius: 30,
-              spreadRadius: -5,
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -575,13 +567,6 @@ Future<void> _toggleNotifications(bool value) async {
         gradient: LinearGradient(
           colors: [Colors.red.shade600, Colors.red.shade400],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: ElevatedButton(
         onPressed: _loggingOut ? null : _handleLogout,

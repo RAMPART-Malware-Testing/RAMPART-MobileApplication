@@ -74,13 +74,6 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: _cardColor,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, -5),
-            ),
-          ],
         ),
         child: SafeArea(
           child: Padding(

@@ -165,10 +165,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         color: _cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2),
-          BoxShadow(color: _cyanColor.withValues(alpha: 0.1), blurRadius: 30, spreadRadius: -5),
-        ],
       ),
       child: Form(
         key: _formKey,
