@@ -152,30 +152,59 @@ class MalwareTypeEntry {
   }
 }
 
-/// หน้าเว็บสลับระหว่างสองชุดนี้ด้วยปุ่ม 'รายวัน' / 'รายเดือน'
+/// สามชุดที่ backend ส่งมาพร้อมกันในคำขอเดียว — หน้าเว็บสลับด้วยปุ่ม
+/// 'รายวัน' / 'รายเดือน' / 'ทั้งหมด' (ดู `TIME_RANGES` ใน
+/// RAMPART-WebApplication/src/app/(pages)/dashboard/page.tsx)
+///
+/// `all` ไม่ได้แปลว่า "ผลรวมของสองชุดแรก" แต่คือมัลแวร์ยอดนิยมตลอดกาล —
+/// เป็นชุดที่หน้าเว็บเลือกไว้ตั้งแต่เปิดหน้า เพราะข้อมูลรายวันมักว่าง
 class TopMalwareTypes {
   final List<MalwareTypeEntry> daily;
   final List<MalwareTypeEntry> monthly;
+  final List<MalwareTypeEntry> all;
 
-  const TopMalwareTypes({this.daily = const [], this.monthly = const []});
+  const TopMalwareTypes({
+    this.daily = const [],
+    this.monthly = const [],
+    this.all = const [],
+  });
 
   factory TopMalwareTypes.fromJson(dynamic raw) {
     final json = _map(raw) ?? const {};
     return TopMalwareTypes(
       daily: _mapList(json['daily']).map(MalwareTypeEntry.fromJson).toList(),
       monthly: _mapList(json['monthly']).map(MalwareTypeEntry.fromJson).toList(),
+      all: _mapList(json['all']).map(MalwareTypeEntry.fromJson).toList(),
     );
   }
 
-  List<MalwareTypeEntry> forRange(String range) =>
-      range == 'daily' ? daily : monthly;
+  List<MalwareTypeEntry> forRange(String range) => switch (range) {
+    'daily' => daily,
+    'monthly' => monthly,
+    _ => all,
+  };
 }
 
 // ---------- คะแนนความอันตรายตามประเภทไฟล์ ----------
 
 /// ค่าเฉลี่ยจำแนกตามประเภทไฟล์ พร้อมค่าเฉลี่ยรายเครื่องมือ
+///
+/// โครงจริงจาก `GET/POST /api/analy/v1/dashboard/summary`
+/// (`services/dashboard/dashboars_service.py`) วางคะแนนรายเครื่องมือไว้ **ซ้อนใน
+/// `tools`** ไม่ใช่คีย์แบน:
+/// ```json
+/// {"fileType":"script","label":"Script","riskScore":92.86,
+///  "tools":{"virustotal":100.0,"mobsf":null,"cape":null,"ai":null},
+///  "sampleCount":14,"scoredCount":14}
+/// ```
+/// อ่านคีย์แบนเดิม (`virustotalScore`, `rampart_ai_score`, …) ไว้เป็น fallback
+/// เผื่อ payload จากที่อื่น — แต่ถ้าอ่านแต่แบน ชิปคะแนนรายเครื่องมือจะไม่ขึ้นเลย
 class RiskScoreEntry {
   final String fileType;
+
+  /// ชื่อหมวดที่คนอ่านรู้เรื่อง ส่งมาจาก backend (`CATEGORIES` ของ
+  /// `utils/file_type_detect.py`) เช่น 'windows-exe' → 'Windows Executable'
+  final String label;
 
   /// คะแนนรวม 0-100
   final double riskScore;
@@ -187,24 +216,46 @@ class RiskScoreEntry {
   /// หรือเป็นตัวเลข 0-100 ตรง ๆ ก็ได้
   final double? aiScore;
 
+  /// ไฟล์ทั้งหมดในหมวดนี้ และจำนวนที่มีคะแนนจริง — หน้าเว็บโชว์เป็น 'N/M ไฟล์'
+  /// หมวดที่มีตัวอย่างน้อยกว่า 3 ไฟล์ที่ให้คะแนนจะไม่ถูกส่งมาเลย
+  final int sampleCount;
+  final int scoredCount;
+
   const RiskScoreEntry({
     this.fileType = '',
+    this.label = '',
     this.riskScore = 0,
     this.virustotalScore,
     this.mobsfScore,
     this.capeScore,
     this.aiScore,
+    this.sampleCount = 0,
+    this.scoredCount = 0,
   });
 
+  /// ชื่อที่ใช้แสดงผล — ป้ายจาก backend ก่อน ถ้าไม่มีค่อยใช้รหัสหมวดดิบ
+  String get displayName => label.isNotEmpty ? label : fileType;
+
   factory RiskScoreEntry.fromJson(Map<String, dynamic> json) {
+    // ค่าเฉลี่ยรายเครื่องมืออยู่ใน `tools` (ค่าที่ไม่มีคือ null ไม่ใช่ 0)
+    final tools = _map(json['tools']) ?? const {};
     return RiskScoreEntry(
       fileType: _str(json['fileType']) ?? _str(json['file_type']) ?? '',
+      label: _str(json['label']) ?? '',
       riskScore: _clampScore(_dbl(json['riskScore']) ?? _dbl(json['risk_score'])),
-      virustotalScore: _dbl(json['virustotalScore']) ?? _dbl(json['virustotal_score']),
-      mobsfScore: _dbl(json['mobsfScore']) ?? _dbl(json['mobsf_score']),
-      capeScore: _dbl(json['capeScore']) ?? _dbl(json['cape_score']),
-      aiScore: _aiScore(json['aiScore'] ?? json['ai_score'] ??
-          json['rampart_ai_score']),
+      virustotalScore: _dbl(json['virustotalScore']) ??
+          _dbl(json['virustotal_score']) ??
+          _dbl(tools['virustotal']),
+      mobsfScore:
+          _dbl(json['mobsfScore']) ?? _dbl(json['mobsf_score']) ?? _dbl(tools['mobsf']),
+      capeScore:
+          _dbl(json['capeScore']) ?? _dbl(json['cape_score']) ?? _dbl(tools['cape']),
+      aiScore: _aiScore(json['aiScore'] ??
+          json['ai_score'] ??
+          json['rampart_ai_score'] ??
+          tools['ai']),
+      sampleCount: _int(json['sampleCount']) ?? _int(json['sample_count']) ?? 0,
+      scoredCount: _int(json['scoredCount']) ?? _int(json['scored_count']) ?? 0,
     );
   }
 

@@ -11,7 +11,12 @@ class TabRefreshBus {
   static const int dashboardTab = 0;
   static const int submitTab = 1;
   static const int reportsTab = 2;
-  static const int settingsTab = 3;
+  static const int publicTab = 3;
+  static const int settingsTab = 4;
+
+  /// คาบที่แท็บซึ่งเปิดค้างอยู่จะดึงข้อมูลใหม่เอง — ใช้ร่วมกันทั้งสามแท็บที่มีข้อมูล
+  /// จากเซิร์ฟเวอร์ (dashboard / รายงานของฉัน / รายงานสาธารณะ) ดู [TabAutoRefresh]
+  static const Duration autoRefreshInterval = Duration(minutes: 1);
 
   static int _currentIndex = dashboardTab;
   static int get currentIndex => _currentIndex;

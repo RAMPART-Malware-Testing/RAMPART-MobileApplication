@@ -3,11 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rampart/models/analysis.dart';
 import 'package:rampart/models/dashboard_stats.dart';
 import 'package:rampart/screens/public_reports_screen.dart';
+import 'package:rampart/services/tab_refresh_bus.dart';
 import 'package:rampart/theme/app_theme.dart';
 
 /// ยืนยันว่าหน้า Public Reports แบ่งหน้าโดยเซิร์ฟเวอร์ ทีละ 5 รายการ
 /// และไม่ปนรายการซ้ำตอนต่อหน้า
 void main() {
+  // แท็บที่เลือกอยู่เป็นสถานะ static ของทั้งโปรเซส — เริ่มทุกเทสต์ที่ dashboard
+  setUp(() => TabRefreshBus.select(TabRefreshBus.dashboardTab));
   AnalysisHistoryItem item(String name) => AnalysisHistoryItem.fromJson({
         'task_id': 'task-$name',
         'file_name': '$name.apk',
@@ -230,5 +233,96 @@ void main() {
 
     expect(find.text('ยังไม่มีรายงานสาธารณะ'), findsOneWidget);
     expect(find.byKey(const Key('public-reports-load-more')), findsNothing);
+  });
+
+  testWidgets('โหมดแท็บ: ซ่อนปุ่มย้อนกลับ และรอโหลดจนกว่าจะถูกเปิดดู', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    final calls = <PublicReportsQuery>[];
+    // เปิดแอปมาที่แท็บ Dashboard — แท็บนี้ถูกสร้างค้างไว้แต่ยังไม่มีใครดู
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: PublicReportsScreen(loadPage: loaderFor(calls), asTab: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(calls, isEmpty, reason: 'dashboard ดึงชุดนี้ไปแล้ว ยังไม่ต้องยิงซ้ำ');
+    expect(find.byTooltip('ย้อนกลับ'), findsNothing);
+
+    TabRefreshBus.select(TabRefreshBus.publicTab);
+    await tester.pumpAndSettle();
+
+    expect(calls.single.page, 1);
+    expect(find.text('public-0.apk'), findsOneWidget);
+
+    TabRefreshBus.select(TabRefreshBus.dashboardTab);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('โหมดแท็บ: เปิดค้างไว้ 1 นาที ดึงหน้าแรกใหม่เองแบบไม่ล้างรายการ', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    final calls = <PublicReportsQuery>[];
+    TabRefreshBus.select(TabRefreshBus.publicTab);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: PublicReportsScreen(loadPage: loaderFor(calls), asTab: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(calls.length, 1);
+
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+
+    expect(calls.length, 2);
+    expect(calls.last.page, 1);
+    expect(find.text('public-0.apk'), findsOneWidget);
+    expect(find.text('แสดง 5 จาก 12 รายการ • หน้า 1/3'), findsOneWidget);
+
+    TabRefreshBus.select(TabRefreshBus.dashboardTab);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('โหมดแท็บ: รีเฟรชอัตโนมัติล้มเหลว ต้องคงรายการเดิมไว้', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    var call = 0;
+    TabRefreshBus.select(TabRefreshBus.publicTab);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: PublicReportsScreen(
+          asTab: true,
+          loadPage: (query) async {
+            call++;
+            if (call == 1) {
+              return PublicReportsPage(
+                items: [item('public-0')],
+                hasMore: false,
+                total: 1,
+              );
+            }
+            return const PublicReportsPage(error: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('public-0.apk'), findsOneWidget);
+    expect(find.text('ยังไม่มีรายงานสาธารณะ'), findsNothing);
+
+    TabRefreshBus.select(TabRefreshBus.dashboardTab);
+    await tester.pumpAndSettle();
   });
 }

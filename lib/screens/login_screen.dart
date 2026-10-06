@@ -34,10 +34,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
-  void _registerFcmToken() {
+  /// ข้ามเมื่อผู้ใช้ปิดสวิตช์แจ้งเตือนไว้ ไม่เช่นนั้นการล็อกอินจะลงทะเบียนอุปกรณ์
+  /// กลับเข้าไปและลบล้างการตั้งค่านั้น
+  Future<void> _registerFcmToken() async {
+    if (!await notificationsAllowed()) return;
     final token = FcmService().deviceToken.value;
     if (token != null) {
-      authService.registerFcmToken(token);
+      await authService.registerFcmToken(token);
     }
   }
 
@@ -234,6 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
             _buildRecaptcha(),
             const SizedBox(height: 24),
             _buildLoginButton(),
+            const SizedBox(height: 16),
             const SizedBox(height: 16),
             _buildRegisterLink(),
           ],

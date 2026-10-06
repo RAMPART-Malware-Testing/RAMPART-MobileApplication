@@ -4,6 +4,7 @@ import '../services/tab_refresh_bus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/offline_banner.dart';
 import 'dashboard_screen.dart';
+import 'public_reports_screen.dart';
 import 'submit_file_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
@@ -19,11 +20,14 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
   // List of screens
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const SubmitFileScreen(),
-    const ReportsScreen(),
-    const SettingsScreen(),
+  final List<Widget> _screens = const [
+    DashboardScreen(),
+    SubmitFileScreen(),
+    ReportsScreen(),
+    // แท็บ Public Reports — เป็น instance ที่ถูกฝังใน IndexedStack จึงปิดปุ่ม
+    // ย้อนกลับ (จะไปปิดทั้งหน้าแรก) และรอโหลดจนกว่าผู้ใช้จะกดแท็บจริง ๆ
+    PublicReportsScreen(asTab: true),
+    SettingsScreen(),
   ];
 
   @override
@@ -104,6 +108,12 @@ class _MainScreenState extends State<MainScreen> {
                 ),
                 _buildNavItem(
                   index: 3,
+                  icon: Icons.public_outlined,
+                  activeIcon: Icons.public,
+                  label: 'Public',
+                ),
+                _buildNavItem(
+                  index: 4,
                   icon: Icons.settings_outlined,
                   activeIcon: Icons.settings,
                   label: 'Settings',

@@ -3,9 +3,111 @@ import 'package:rampart/models/dashboard_stats.dart';
 
 /// ล็อก contract ของ dashboard API ให้ตรงกับที่หน้าเว็บอ่านจริง
 /// (ดู RAMPART-WebApplication/src/hooks/queries/useDashboard.ts)
+///
+/// payload ด้านล่างคัดลอกจาก response จริงของ
+/// `POST /api/analy/v1/dashboard/summary` (ยิงที่ localhost:8006 ผ่าน token
+/// จาก `/test/api/token`) — สำคัญ: ค่าเฉลี่ยรายเครื่องมืออยู่ใน `tools` ซ้อนกัน
+/// ไม่ใช่คีย์แบน ถ้าเผลออ่านแต่คีย์แบน ชิปคะแนนจะไม่ขึ้นเลยทั้งที่ข้อมูลมา
 void main() {
   group('DashboardSummary', () {
-    test('แปลง payload ของ summary ได้ครบทุก field', () {
+    // ตัวอย่างจริง (ตัดให้สั้น) — daily ว่าง ส่วน all กับ monthly มีข้อมูล
+    Map<String, dynamic> realSummary() => {
+      'totalFiles': {'total': 77, 'success': 77, 'pending': 0, 'failed': 0},
+      'userFiles': {'total': 4, 'success': 4, 'pending': 0, 'failed': 0},
+      'totalUsers': 2,
+      'topMalwareTypes': {
+        'daily': <dynamic>[],
+        'monthly': [
+          {'type': 'Trojan.Msil', 'count': 8},
+          {'type': 'Trojan', 'count': 5},
+        ],
+        'all': [
+          {'type': 'Trojan.Msil', 'count': 8},
+          {'type': 'Trojan', 'count': 5},
+        ],
+      },
+      'riskScores': [
+        {
+          'fileType': 'script',
+          'label': 'Script',
+          'riskScore': 92.86,
+          'tools': {
+            'virustotal': 100.0,
+            'mobsf': null,
+            'cape': null,
+            'ai': null,
+          },
+          'sampleCount': 14,
+          'scoredCount': 14,
+        },
+        {
+          'fileType': 'windows-exe',
+          'label': 'Windows Executable',
+          'riskScore': 92.69,
+          'tools': {
+            'virustotal': 100.0,
+            'mobsf': null,
+            'cape': null,
+            'ai': 95.0,
+          },
+          'sampleCount': 13,
+          'scoredCount': 11,
+        },
+      ],
+    };
+
+    test('แปลง payload จริงของ summary ได้ครบทุก field', () {
+      final summary = DashboardSummary.fromJson(realSummary());
+
+      expect(summary.totalFiles.total, 77);
+      expect(summary.totalFiles.success, 77);
+      expect(summary.userFiles.total, 4);
+      expect(summary.totalUsers, 2);
+
+      expect(summary.topMalwareTypes.daily, isEmpty);
+      expect(summary.topMalwareTypes.monthly.first.type, 'Trojan.Msil');
+      expect(summary.topMalwareTypes.all.first.count, 8);
+
+      final script = summary.riskScores.first;
+      expect(script.fileType, 'script');
+      expect(script.label, 'Script');
+      expect(script.displayName, 'Script');
+      expect(script.riskScore, closeTo(92.86, 0.001));
+      expect(script.sampleCount, 14);
+      expect(script.scoredCount, 14);
+
+      // คะแนนรายเครื่องมืออยู่ในคีย์ซ้อน tools — และตัวที่เป็น null ต้องไม่ถูก
+      // ตีความเป็น 0 แล้วโผล่เป็นชิปหลอก ๆ
+      expect(script.virustotalScore, 100);
+      expect(script.mobsfScore, isNull);
+      expect(script.capeScore, isNull);
+      expect(script.aiScore, isNull);
+      expect(script.toolScores.length, 1);
+      expect(script.toolScores.single.label, 'VT');
+
+      final exe = summary.riskScores.last;
+      expect(exe.aiScore, 95);
+      expect(exe.toolScores.map((t) => t.label), ['VT', 'AI']);
+      expect(exe.scoredCount, 11);
+    });
+
+    test('ไม่มีเครื่องมือไหนให้คะแนนเลย ต้องไม่มีชิปให้แสดง', () {
+      final entry = RiskScoreEntry.fromJson({
+        'fileType': 'apk',
+        'label': 'Android APK',
+        'riskScore': 40,
+        'tools': {'virustotal': null, 'mobsf': null, 'cape': null, 'ai': null},
+      });
+      expect(entry.toolScores, isEmpty);
+      expect(entry.displayName, 'Android APK');
+    });
+
+    test('ป้ายชื่อหมวดหายไป ใช้รหัสหมวดแทนได้', () {
+      final entry = RiskScoreEntry.fromJson({'fileType': 'windows-exe'});
+      expect(entry.displayName, 'windows-exe');
+    });
+
+    test('รองรับ payload คีย์แบนแบบเก่าเป็น fallback', () {
       final summary = DashboardSummary.fromJson({
         'totalFiles': {'total': 120, 'success': 90, 'pending': 20, 'failed': 10},
         'userFiles': {'total': 7, 'success': 4, 'pending': 2, 'failed': 1},
@@ -32,25 +134,45 @@ void main() {
       });
 
       expect(summary.totalFiles.total, 120);
-      expect(summary.totalFiles.success, 90);
-      expect(summary.totalUsers, 42);
-      expect(summary.userFiles.total, 7);
-
-      expect(summary.topMalwareTypes.daily.length, 2);
-      expect(summary.topMalwareTypes.daily.first.type, 'Trojan');
-      expect(summary.topMalwareTypes.daily.first.count, 12);
       expect(summary.topMalwareTypes.forRange('monthly').first.type, 'Spyware');
       expect(summary.topMalwareTypes.forRange('daily').length, 2);
 
       final risk = summary.riskScores.single;
       expect(risk.fileType, 'apk');
-      expect(risk.riskScore, 82.5);
       expect(risk.virustotalScore, 60);
       expect(risk.mobsfScore, 91.2);
       // backend ส่ง rampart_ai_score เป็น object {malware_probability: 0.83}
       // ต้องถูกคูณ 100 ให้เป็นสเกลเดียวกับเครื่องมืออื่น
       expect(risk.aiScore, 83);
       expect(risk.toolScores.length, 4);
+    });
+
+    test('forRange ที่ไม่รู้จักตกมาที่ชุดทั้งหมด ไม่ใช่ monthly', () {
+      final types = TopMalwareTypes.fromJson({
+        'daily': [
+          {'type': 'D', 'count': 1},
+        ],
+        'monthly': [
+          {'type': 'M', 'count': 1},
+        ],
+        'all': [
+          {'type': 'A', 'count': 1},
+        ],
+      });
+
+      expect(types.forRange('daily').single.type, 'D');
+      expect(types.forRange('monthly').single.type, 'M');
+      expect(types.forRange('all').single.type, 'A');
+      expect(types.forRange('something-else').single.type, 'A');
+    });
+
+    test('payload ที่ไม่มีชุด all ต้องไม่ทำให้ throw', () {
+      final types = TopMalwareTypes.fromJson({
+        'daily': <dynamic>[],
+        'monthly': <dynamic>[],
+      });
+      expect(types.all, isEmpty);
+      expect(types.forRange('all'), isEmpty);
     });
 
     test('tryParse แตก envelope {success, data} ของหน้าเว็บได้', () {

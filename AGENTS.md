@@ -8,7 +8,9 @@
 - **Theming**: `flex_color_scheme` with custom `ThemeExtension<CustomColors>`.
 - **Font**: Kanit bundled via `fonts` section in pubspec.yaml, runtime fetching disabled.
 - **Storage**: `flutter_secure_storage` for tokens + PIN.
-- **Charts**: `fl_chart`.
+- **Charts**: none — the `fl_chart` dependency was removed on 2026-10-06 (the dashboard's
+  bar chart duplicated the ranked list below it). Progress rings/bars are plain
+  `CircularProgressIndicator` / `LinearProgressIndicator`.
 - **Firebase IS present** — `firebase_core` + `firebase_messaging` + `flutter_local_notifications`, initialised after first frame via `addPostFrameCallback`. Auth itself is email/password + OTP + PIN over REST; Firebase is only the push channel.
 
 ## Key commands
@@ -116,6 +118,18 @@ A `StatefulWidget` that creates an `AnimationController`, `Timer`, or
 Closures and `withOpacity()` colours created inside an animation's builder allocate on
 every frame.
 
+**R11 — Recurring work is gated on visibility, never on "the screen exists".**
+Every tab stays alive inside `IndexedStack` (R6), so a timer that refetches belongs to the
+tab *selection*, not to the widget. Use `TabAutoRefresh`
+(`lib/services/tab_auto_refresh.dart`): it runs only while its tab is selected, the app is
+in the foreground (`AppLifecycleListener`), and the screen's route is on top
+(`ModalRoute.isCurrent` — a pushed detail page pauses it). Cadence comes from
+`TabRefreshBus.autoRefreshInterval` (1 minute) and is applied to the three data tabs —
+dashboard, reports, public reports. The refresh must be silent: keep the list on screen and
+show the thin `LinearProgressIndicator`, never a full-screen spinner. Guard against
+overlapping requests, and never drop a user-initiated action that arrives mid-request
+(queue it instead).
+
 ### Definition of Done (perf gate)
 
 Before calling any UI or service change complete:
@@ -176,7 +190,7 @@ lib/
     forgot_password_screen.dart      # Email -> OTP -> new password
     PINSetupScreen.dart              # 6-digit PIN setup with confirm
     PinVerifyScreen.dart             # 6-digit PIN verify (5 attempts max)
-    main_screen.dart                 # Bottom nav: Dashboard, Submit, Reports, Settings
+    main_screen.dart                 # Bottom nav: Dashboard, Submit, Reports, Public, Settings
     dashboard_screen.dart            # Stats, risk gauge, top malware bar chart
     submit_file_screen.dart          # File picker + upload (100MB max)
     reports_screen.dart              # Filter chips + report cards
@@ -229,14 +243,39 @@ Screen (StatefulWidget + setState) -> Service (Dio/HTTP) -> REST API
 
 Do not trust a screen's appearance as evidence a backend exists.
 
+**Where the API contract actually lives** (checked 2026-10-06, the mobile screen was
+dropping data because it was guessed instead of read):
+- Server: `E:\GITHUB\RAMPART-API-SERVERv1` — `routers/dashboar_route.py`,
+  `controller/dashboard_controller.py`, `services/dashboard/dashboars_service.py`.
+  The summary response is a bare dict (no envelope) and **nests the per-tool averages**:
+  `riskScores[].tools.{virustotal,mobsf,cape,ai}` plus `label`, `sampleCount`,
+  `scoredCount`; `topMalwareTypes` carries **three** groups `daily` / `monthly` / `all`.
+- Web: `E:\GITHUB\RAMPART-WebApplication` — `src/hooks/queries/useDashboard.ts` (types) and
+  `src/app/(pages)/dashboard/page.tsx` (what is actually displayed, incl. the three
+  time-range buttons, default `all`, the rank-1 "พบมากที่สุด" badge, and the
+  "ดูผล<ช่วง> (N ประเภท)" buttons in the empty state).
+- Deliberate differences from the web page (do not "fix" these): the web fetches
+  `recent-activities` but never renders it, so the mobile-only "กิจกรรมล่าสุด" section and
+  its Reports-tab link stay, as does the average-risk gauge. The TOP 10 **bar chart was
+  removed** (2026-10-06): it duplicated the ranked list directly below it (same 10 items and
+  counts, each row already has a proportional bar) and was the heaviest widget on the page —
+  with it gone `fl_chart` is no longer a dependency. The uploader line shows a
+  first-letter circle instead of the network avatar, because `uploaded_by.avatar_url`
+  points at files that 404 on real data and the dashboard refreshes itself every minute
+  (R11).
+- Live API on this dev box: `http://localhost:8006` (`{"success":true,"message":
+  "RAMPART-API is running"}`); `POST /test/api/user` then `POST /test/api/token` mints a
+  credential-free access token for probing. `lib/core/config.dart` points at the ngrok
+  tunnel that forwards to that same server.
+
 | Feature | Status | Evidence |
 |---|---|---|
 | Login / Register / OTP / Reset password | **REAL** | `authService.dart:53-63, 145-148, 108-114` |
 | Forgot password flow | **BROKEN** | `forgot_password_screen.dart:53-68` shows success and navigates even when the API reports failure |
 | PIN setup / verify | **REAL** | `PIN_controller.dart:51-71, 79-116`; keypad is wired |
-| Dashboard stats | **MOCK + renders nothing** | fetch is commented out (`dashboard_screen.dart:62-67`), `_stats` is never assigned, so only the welcome card renders. `DashboardService.summary()` has zero callers. |
+| Dashboard stats | **REAL** | `dashboard_screen.dart` fetches all three endpoints in parallel via `DashboardService.loadDashboard()` (4 s memory cache + disk-cache fallback). Verified against the live API on the emulator 2026-10-06 — stat subtitles, category labels, `scored/scored ไฟล์`, per-tool chips and all three malware ranges render. Read `riskScores[].tools` — flat keys silently drop every chip. |
 | Submit/upload file | **BROKEN** | picks a file fine, but posts to the placeholder host `https://your-api-server.com/api` (`file_upload_service.dart:8`); progress bar is faked (`submit_file_screen.dart:246-277`) |
-| Reports list | **MOCK** | 6 hardcoded reports (`reports_screen.dart:397-430`), action buttons have empty `onPressed` |
+| Reports list | **REAL** | `reports_screen.dart` paginates `analysis/history` server-side, 5 per page, with filters; `test/reports_pagination_test.dart` |
 | Settings | **MOCK/PARTIAL** | hardcoded profile `analyst@rampart.security` (`settings_screen.dart:228-243`); toggles persist nothing; dark-mode toggle changes no theme |
 | Push notifications | **REAL** | full FCM + local-notification wiring; blocked on Android 13+ until `POST_NOTIFICATIONS` is declared |
 | Logout | **BROKEN** | navigates only (`settings_screen.dart:86`); `clearAuthData()` is implemented (`authService.dart:295-305`) but **nothing calls it**, so tokens survive and the app re-locks instead of logging out |

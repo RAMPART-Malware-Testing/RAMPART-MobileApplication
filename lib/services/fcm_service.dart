@@ -16,7 +16,7 @@ const String _notifEnabledKey = 'notif_enabled';
 /// อ่านจาก storage ทุกครั้งแทนการจำไว้ในหน่วยความจำ เพราะฟังก์ชันนี้ถูกเรียกจาก
 /// ทั้ง isolate หลักและ isolate เบื้องหลัง ซึ่งไม่แชร์หน่วยความจำกัน
 /// ค่าเริ่มต้นคือเปิด เมื่ออ่านไม่ได้หรือยังไม่เคยตั้ง
-Future<bool> _notificationsEnabled() async {
+Future<bool> notificationsAllowed() async {
   try {
     final stored = await const FlutterSecureStorage().read(
       key: _notifEnabledKey,
@@ -34,7 +34,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final body = message.notification?.body ?? '';
   print('[FCM] Background: $title — $body');
   await _ensureNotificationsInit();
-  if (!await _notificationsEnabled()) return;
+  if (!await notificationsAllowed()) return;
   await _showLocalNotification(
     id: message.messageId.hashCode,
     title: title,
@@ -230,6 +230,7 @@ class FcmService {
         settings.authorizationStatus == AuthorizationStatus.provisional) {
       deviceToken.value = await FirebaseMessaging.instance.getToken();
       print('[FCM] Device token: ${deviceToken.value}');
+      _registerCurrentToken();
 
       FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
         deviceToken.value = newToken;
@@ -272,7 +273,7 @@ class FcmService {
     if (message.notification == null) return;
     print('[FCM] Title: ${message.notification!.title}');
     print('[FCM] Body: ${message.notification!.body}');
-    if (!await _notificationsEnabled()) return;
+    if (!await notificationsAllowed()) return;
     await _showLocalNotification(
       id: message.messageId.hashCode,
       title: message.notification!.title ?? 'RAMPART',
@@ -290,7 +291,10 @@ class FcmService {
     );
   }
 
+  /// ต้องเช็คสวิตช์ก่อน ไม่งั้นการเปิดแอปใหม่จะลงทะเบียนอุปกรณ์กลับเข้าไปทุกครั้ง
+  /// แล้วลบล้างการที่ผู้ใช้ปิดแจ้งเตือนไว้
   Future<void> _registerCurrentToken() async {
+    if (!await notificationsAllowed()) return;
     final token = deviceToken.value;
     if (token == null) return;
     try {

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:rampart/models/profile.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/fcm_service.dart';
 import 'package:rampart/services/profile_service.dart';
 import 'package:rampart/services/tab_refresh_bus.dart';
 import 'package:rampart/theme/app_theme.dart';
@@ -73,11 +74,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  /// ค่านี้ถูกอ่านฝั่ง FcmService ตอนจะแสดงการแจ้งเตือนจริง (ทั้ง isolate หลัก
-  /// และ isolate เบื้องหลัง) จึงไม่ต้องส่งต่อไปที่ไหนอีก
-  Future<void> _toggleNotifications(bool value) async {
+/// สวิตช์นี้ต้องมีผลสองชั้น
+///
+/// ค่าในเครื่องคุมแบนเนอร์ตอนแอปอยู่หน้าจอ (อ่านโดย [FcmService]) แต่ตอนแอปอยู่
+/// เบื้องหลังระบบปฏิบัติการเป็นคนวาดแจ้งเตือนเองจาก `notification` block โค้ด Dart
+/// ไม่มีโอกาสได้ทำงาน ค่าในเครื่องจึงคุมไม่ได้
+///
+/// ชั้นที่ได้ผลจริงคือฝั่งเซิร์ฟเวอร์: ปิดสวิตช์แล้วถอนอุปกรณ์ออก ไม่มี token ก็
+/// ไม่มีการส่งเลย เปิดกลับแล้วลงทะเบียนใหม่
+Future<void> _toggleNotifications(bool value) async {
     setState(() => _notificationsEnabled = value);
     await _storage.write(key: 'notif_enabled', value: value.toString());
+
+    final service = AuthService();
+    if (value) {
+      final token = FcmService().deviceToken.value;
+      if (token != null) await service.registerFcmToken(token);
+    } else {
+      await service.unregisterFcmToken();
+    }
   }
 
   Future<void> _navigateToProfileEdit() async {
@@ -104,6 +119,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed == true && mounted) {
       setState(() => _loggingOut = true);
+      await AuthService().unregisterFcmToken();
       await AuthService().clearAuthData();
       if (!mounted) return;
       Get.offAllNamed('/login');

@@ -397,16 +397,31 @@ class AuthService {
   }
 
   Future<void> registerFcmToken(String fcmToken) async {
-    var accessToken = await _storage.read(key: 'session_token');
-    if (accessToken == null || accessToken.isEmpty) return;
+    final accessToken = await _storage.read(key: 'session_token');
+    // 'null' เป็นสตริงที่เคยถูกเขียนลงไปจริงในอดีต จึงต้องกันด้วย ไม่ใช่แค่ค่าว่าง
+    if (accessToken == null || accessToken.isEmpty || accessToken == 'null') return;
     try {
       await _http.post(
         '/api/fcm/register',
-        data: {'fcm_token': fcmToken},
-        options: Options(headers: {'x-access-token': accessToken}),
+        data: {'token': accessToken, 'fcm_token': fcmToken},
       );
     } catch (e) {
       print('[AUTH] FCM token registration failed: $e');
+    }
+  }
+
+  /// Detach this device from push before the session is cleared.
+  ///
+  /// Without it the account keeps this phone's token, and whoever signs in next
+  /// on the same account would receive this user's analysis results.
+  Future<void> unregisterFcmToken() async {
+    final accessToken = await _storage.read(key: 'session_token');
+    // 'null' เป็นสตริงที่เคยถูกเขียนลงไปจริงในอดีต จึงต้องกันด้วย ไม่ใช่แค่ค่าว่าง
+    if (accessToken == null || accessToken.isEmpty || accessToken == 'null') return;
+    try {
+      await _http.post('/api/fcm/unregister', data: {'token': accessToken});
+    } catch (e) {
+      print('[AUTH] FCM token unregister failed: $e');
     }
   }
 
@@ -451,6 +466,9 @@ class AuthService {
       _storage.delete(key: 'deviceToken'),
       _storage.delete(key: 'is_authenticated'),
       _storage.delete(key: 'pin_wrong_count'),
+      // สวิตช์แจ้งเตือนเป็นค่าประจำเครื่อง ถ้าไม่ล้างคนถัดไปที่ล็อกอินจะไม่ได้
+      // แจ้งเตือนเลยเพราะติดค่าที่คนก่อนปิดไว้
+      _storage.delete(key: 'notif_enabled'),
     ]);
     // ข้อมูลที่แคชไว้เป็นของผู้ใช้คนเดิม — ต้องหายไปพร้อมกับ token
     // ไม่งั้นคนที่ล็อกอินคนถัดไปบนเครื่องเดียวกันจะเห็นประวัติของคนก่อน

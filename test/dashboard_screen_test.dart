@@ -9,6 +9,9 @@ import 'package:rampart/theme/app_theme.dart';
 /// ยืนยันว่าหน้า dashboard แสดงข้อมูลที่เซิร์ฟเวอร์ส่งมาจริง
 /// โดยเติมข้อมูลผ่านช่อง [DashboardScreen.load] แทนการยิงเครือข่าย
 void main() {
+  // แท็บที่เลือกอยู่เป็นสถานะ static ของทั้งโปรเซส — เริ่มทุกเทสต์ที่ dashboard
+  setUp(() => TabRefreshBus.select(TabRefreshBus.dashboardTab));
+
   // payload เดียวกับที่ backend ส่งมา ตัดขาดความกำกวมเรื่องชื่อ field
   final bundle = DashboardBundle.fromResponses(
     summary: {
@@ -25,13 +28,26 @@ void main() {
           'monthly': [
             {'type': 'Spyware', 'count': 30},
           ],
+          // ชุดที่สามที่ backend ส่งมา — หน้าเว็บเริ่มที่ชุดนี้
+          'all': [
+            {'type': 'Ransomware', 'count': 44},
+          ],
         },
+        // โครงจริงจากเซิร์ฟเวอร์: คะแนนรายเครื่องมือซ้อนใน `tools` และมี
+        // label + จำนวนตัวอย่างติดมาด้วย
         'riskScores': [
           {
-            'fileType': 'apk',
+            'fileType': 'windows-exe',
+            'label': 'Windows Executable',
             'riskScore': 85,
-            'virustotalScore': 60,
-            'rampart_ai_score': {'malware_probability': 0.9},
+            'tools': {
+              'virustotal': 60.0,
+              'mobsf': null,
+              'cape': null,
+              'ai': 90.0,
+            },
+            'sampleCount': 13,
+            'scoredCount': 13,
           },
         ],
       },
@@ -87,6 +103,11 @@ void main() {
     // 90/120 = 75.0%
     expect(find.text('อัตราความสำเร็จ'), findsOneWidget);
     expect(find.text('75.0%'), findsOneWidget);
+    // บรรทัดรองแบบเดียวกับ StatCard ของหน้าเว็บ — ดึงจาก field ที่มีอยู่แล้ว
+    // ใน response เดียวกัน
+    expect(find.text('สำเร็จ 90 รายการ'), findsOneWidget);
+    expect(find.text('รอวิเคราะห์ 2 รายการ'), findsOneWidget);
+    expect(find.text('สมาชิกที่ลงทะเบียน'), findsOneWidget);
   });
 
   testWidgets('แสดงรายงานสาธารณะพร้อมชิปคะแนนรายเครื่องมือ', (tester) async {
@@ -97,9 +118,13 @@ void main() {
     expect(find.text('92/100'), findsOneWidget);
     // 85 และ 92 ตกในช่วง >= 80 -> อันตรายร้ายแรง
     expect(find.text('อันตรายร้ายแรง'), findsNWidgets(2));
-    // ขนาดไฟล์ 4 MB และผู้อัปโหลด
+    // ขนาดไฟล์ 4 MB
     expect(find.textContaining('4.00 MB'), findsOneWidget);
-    expect(find.textContaining('analyst01'), findsOneWidget);
+    // ผู้อัปโหลดมีบรรทัดของตัวเอง (วงกลมตัวอักษรแรก + ชื่อ) เหมือนการ์ดในหน้าเว็บ
+    expect(find.text('analyst01'), findsOneWidget);
+    expect(find.text('A'), findsOneWidget);
+    // สถานะใช้ข้อความไทยชุดเดียวกับแท็บอื่น ไม่ใช่ค่าดิบ 'success'
+    expect(find.text('success'), findsNothing);
   });
 
   testWidgets('แสดงกิจกรรมล่าสุดพร้อมป้ายสถานะ', (tester) async {
@@ -108,7 +133,8 @@ void main() {
     expect(find.text('กิจกรรมล่าสุด'), findsOneWidget);
     expect(find.text('invoice.pdf'), findsOneWidget);
     expect(find.text('update.apk'), findsOneWidget);
-    expect(find.text('สำเร็จ'), findsOneWidget);
+    // 2 ที่คือป้ายของกิจกรรม ('สำเร็จ') และป้ายของรายงานสาธารณะ ('สำเร็จ')
+    expect(find.text('สำเร็จ'), findsNWidgets(2));
     expect(find.text('รอวิเคราะห์'), findsOneWidget);
   });
 
@@ -160,17 +186,26 @@ void main() {
     expect(find.text(expected), findsWidgets);
   });
 
-  testWidgets('แสดงคะแนนความอันตรายตามประเภทไฟล์', (tester) async {
+  testWidgets('แสดงคะแนนความอันตรายตามประเภทไฟล์ พร้อมค่าเฉลี่ยรายเครื่องมือ', (
+    tester,
+  ) async {
     await pumpDashboard(tester, bundle);
 
     expect(find.text('คะแนนความอันตราย'), findsOneWidget);
-    expect(find.text('apk'), findsOneWidget);
+    // ป้ายชื่อหมวดจาก backend ไม่ใช่รหัสดิบ และต้องบอกจำนวนตัวอย่าง
+    expect(find.textContaining('Windows Executable'), findsOneWidget);
+    expect(find.textContaining('13/13 ไฟล์'), findsOneWidget);
     expect(find.text('85/100'), findsOneWidget);
+    // คะแนนเฉลี่ยรายเครื่องมือมาจากคีย์ซ้อน `tools` ของ response จริง
+    expect(find.text('VT 60'), findsOneWidget);
+    expect(find.text('AI 90'), findsOneWidget);
     // ค่าเฉลี่ยคือ 85 -> ป้ายอันตรายร้ายแรง
     expect(find.text('คะแนนเฉลี่ยทั้งระบบ'), findsOneWidget);
   });
 
-  testWidgets('สลับรายวัน/รายเดือนเปลี่ยนรายการมัลแวร์โดยไม่ยิงซ้ำ', (tester) async {
+  testWidgets('สลับรายวัน/รายเดือน/ทั้งหมดเปลี่ยนรายการมัลแวร์โดยไม่ยิงซ้ำ', (
+    tester,
+  ) async {
     var callCount = 0;
     await tester.pumpWidget(
       MaterialApp(
@@ -183,9 +218,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // ชื่อมัลแวร์โผล่ได้ทั้งในป้ายใต้กราฟและแถวในลิสต์ (นับแค่ว่ามี ไม่นับจำนวน
-    // เพราะป้ายใต้กราฟถูกสร้างเฉพาะแท่งที่ยังอยู่ใน viewport)
-    expect(find.text('Trojan'), findsWidgets);
+    // เริ่มที่ชุด 'ทั้งหมด' เหมือนหน้าเว็บ — ชุดรายวันมักว่างจนดูเหมือนไม่มีข้อมูล
+    expect(find.text('Ransomware'), findsWidgets);
+    expect(find.text('Trojan'), findsNothing);
     expect(find.text('Spyware'), findsNothing);
 
     await tester.ensureVisible(find.text('รายเดือน'));
@@ -194,9 +229,72 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Spyware'), findsWidgets);
-    expect(find.text('Trojan'), findsNothing);
-    // ข้อมูลทั้งสองชุดมาพร้อมกันแล้ว จึงต้องไม่ยิงเครือข่ายซ้ำ
+    expect(find.text('Ransomware'), findsNothing);
+
+    await tester.tap(find.text('รายวัน'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trojan'), findsWidgets);
+    expect(find.text('Adware'), findsWidgets);
+    expect(find.text('Spyware'), findsNothing);
+
+    // ข้อมูลทั้งสามชุดมาพร้อมกันแล้ว จึงต้องไม่ยิงเครือข่ายซ้ำ
     expect(callCount, 1);
+  });
+
+  testWidgets('อันดับหนึ่งของมัลแวร์ติดป้าย "พบมากที่สุด" เหมือนหน้าเว็บ', (
+    tester,
+  ) async {
+    await pumpDashboard(tester, bundle);
+
+    expect(find.text('พบมากที่สุด'), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+  });
+
+  testWidgets('ช่วงที่ไม่มีข้อมูลต้องบอกทางไปช่วงที่มีข้อมูล', (tester) async {
+    final dailyEmpty = DashboardBundle.fromResponses(
+      summary: {
+        'success': true,
+        'data': {
+          'totalFiles': {'total': 0, 'success': 0, 'pending': 0, 'failed': 0},
+          'userFiles': {'total': 0, 'success': 0, 'pending': 0, 'failed': 0},
+          'totalUsers': 0,
+          // ชุดรายวันว่างจริงเหมือนบนเซิร์ฟเวอร์ (ไม่มีสแกนวันนี้)
+          'topMalwareTypes': {
+            'daily': <dynamic>[],
+            'monthly': [
+              {'type': 'Spyware', 'count': 30},
+            ],
+            'all': [
+              {'type': 'Ransomware', 'count': 44},
+            ],
+          },
+          'riskScores': <dynamic>[],
+        },
+      },
+    );
+    await pumpDashboard(tester, dailyEmpty);
+
+    // เริ่มที่ 'ทั้งหมด' ซึ่งมีข้อมูล
+    expect(find.text('Ransomware'), findsWidgets);
+
+    await tester.ensureVisible(find.text('รายวัน'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('รายวัน'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ไม่พบมัลแวร์จากการสแกนในวันนี้'), findsOneWidget);
+    // ทั้งสองช่วงที่เหลือมีข้อมูลอย่างละ 1 ประเภท จึงต้องเสนอทั้งคู่
+    expect(find.text('ดูผลรายเดือน (1 ประเภท)'), findsOneWidget);
+    expect(find.text('ดูผลทั้งหมด (1 ประเภท)'), findsOneWidget);
+
+    // กดปุ่มที่แนะนำแล้วต้องพาไปช่วงนั้นจริง (ปุ่มอยู่ท้ายหน้า ต้องเลื่อนให้เห็นก่อน)
+    final hint = find.byKey(const Key('malware-range-monthly'));
+    await tester.ensureVisible(hint);
+    await tester.pumpAndSettle();
+    await tester.tap(hint);
+    await tester.pumpAndSettle();
+    expect(find.text('Spyware'), findsWidgets);
   });
 
   testWidgets('แสดง error พร้อมปุ่มลองอีกครั้งเมื่อทุก endpoint ล้ม', (tester) async {
@@ -281,6 +379,53 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('ปุ่มดูทั้งหมดของไฟล์สาธารณะพาไปแท็บ Public', (tester) async {
+    await pumpDashboard(
+      tester,
+      DashboardBundle.fromResponses(publicReports: fiveItemBundleResponse()),
+    );
+
+    final button = find.byKey(const Key('public-view-more'));
+    await tester.scrollUntilVisible(button, 300);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(TabRefreshBus.currentIndex, TabRefreshBus.publicTab);
+    TabRefreshBus.select(TabRefreshBus.dashboardTab);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('เปิดแท็บ dashboard ค้างไว้ 1 นาที ดึงข้อมูลใหม่เอง', (tester) async {
+    var callCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: DashboardScreen(
+          load: () async {
+            callCount++;
+            return bundle;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(callCount, 1);
+
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(callCount, 2, reason: 'เปิดค้างไว้ต้องรีเฟรชเองทุก 1 นาที');
+
+    // ออกจากแท็บแล้วตัวจับเวลาต้องหยุด ไม่ยิงข้อมูลของแท็บที่ไม่ได้ดูอยู่
+    TabRefreshBus.select(TabRefreshBus.reportsTab);
+    await tester.pump(const Duration(minutes: 3));
+    await tester.pumpAndSettle();
+    expect(callCount, 2);
+
+    TabRefreshBus.select(TabRefreshBus.dashboardTab);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('แถวไฟล์สาธารณะไม่ล้นจอแคบแม้มีชิปคะแนนครบทุกเครื่องมือ', (tester) async {
     // จอเป้าหมายคือมือถือระดับเริ่มต้นกว้าง ~360dp — ชิป 4 เครื่องมือวางใน
     // Row เดียวกับคะแนนเดิมล้นแน่นอน ต้องตัดบรรทัดด้วย Wrap แทน
@@ -318,9 +463,17 @@ void main() {
     expect(find.text('ไม่มีไฟล์'), findsOneWidget);
     expect(find.text('ยังไม่มีกิจกรรม'), findsOneWidget);
     expect(find.text('ไม่มีข้อมูลความเสี่ยง'), findsOneWidget);
-    expect(find.text('ไม่มีข้อมูลในขณะนี้'), findsOneWidget);
+    // ข้อความว่างของ TOP 10 เปลี่ยนตามช่วงเวลาที่เลือก (เริ่มที่ 'ทั้งหมด')
+    expect(find.text('ยังไม่พบมัลแวร์จากการสแกนเลย'), findsOneWidget);
     expect(find.text('ยังไม่มีไฟล์ในระบบ'), findsOneWidget);
     expect(find.text('เกิดข้อผิดพลาด'), findsNothing);
+
+    // ตัวเลือกช่วงเวลาต้องกดได้แม้ไม่เหลือข้อมูลเลย
+    await tester.ensureVisible(find.text('รายวัน'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('รายวัน'));
+    await tester.pumpAndSettle();
+    expect(find.text('ไม่พบมัลแวร์จากการสแกนในวันนี้'), findsOneWidget);
   });
 }
 

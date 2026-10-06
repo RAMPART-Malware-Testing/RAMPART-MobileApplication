@@ -1,11 +1,12 @@
-import 'package:fl_chart/fl_chart.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../models/analysis.dart';
 import '../models/dashboard_stats.dart';
 import '../services/dashboard_service.dart';
+import '../services/tab_auto_refresh.dart';
 import '../services/tab_refresh_bus.dart';
 import '../theme/app_theme.dart';
 
@@ -40,16 +41,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _error = '';
   DashboardBundle? _bundle;
 
+  /// คำขอกำลังวิ่งอยู่ — กันตัวจับเวลากับการกดแท็บยิงซ้อนกัน
+  bool _fetching = false;
+
+  /// ผู้ใช้สั่งดึงเอง (ดึงลงเพื่อรีเฟรช / ปุ่มลองอีกครั้ง) ระหว่างที่คำขอเดิมยังวิ่ง
+  /// อยู่ — จำไว้ยิงต่อทันทีที่คำขอเดิมเสร็จ คำสั่งผู้ใช้ต้องไม่หายเงียบ ๆ
+  bool _pendingForcedLoad = false;
+
+  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
+  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
+  late final TabAutoRefresh _autoRefresh;
+
   // ---------- รายงานสาธารณะ ----------
   //
-  // dashboard โชว์แค่ 5 อันดับแรก ส่วนที่เหลือไปดูต่อที่หน้า "Public Reports"
-  // ซึ่งแบ่งหน้าเอง (ปุ่ม "ดูทั้งหมด") — เหมือนกิจกรรมล่าสุดที่พาไปแท็บ Reports
+  // dashboard โชว์แค่ 5 อันดับแรก ส่วนที่เหลือไปดูต่อที่แท็บ "Public"
+  // (ปุ่ม "ดูทั้งหมด" สลับแท็บให้) — เหมือนกิจกรรมล่าสุดที่พาไปแท็บ Reports
   List<AnalysisHistoryItem> _publicReports = const [];
   int _publicTotal = 0;
 
-  /// 'daily' หรือ 'monthly' — สองชุดนี้มาพร้อมกันใน response เดียวกัน
+  /// 'daily' / 'monthly' / 'all' — สามชุดนี้มาพร้อมกันใน response เดียวกัน
   /// การสลับจึงเป็นแค่ setState ไม่ต้องยิงซ้ำ
-  String _selectedRange = 'daily';
+  ///
+  /// เริ่มที่ 'all' เหมือนหน้าเว็บ: ชุดรายวันว่างเกือบตลอด (ไม่มีสแกนใหม่วันนี้)
+  /// ถ้าเริ่มที่ daily ผู้ใช้จะเห็น "ไม่มีข้อมูลในขณะนี้" ทั้งที่ระบบมีข้อมูลครบ
+  String _selectedRange = 'all';
 
   // ใช้สีจาก Theme
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
@@ -84,6 +99,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     TabRefreshBus.addListener(_onTabSelected);
+    _autoRefresh = TabAutoRefresh(
+      tabIndex: TabRefreshBus.dashboardTab,
+      onRefresh: _refreshFromTimer,
+      isVisible: _isRouteVisible,
+    );
     // ยิงหลังเฟรมแรกเสร็จ เพื่อไม่ให้รอเครือข่ายก่อนหน้าจอแรกวาด (ดู R1 ใน AGENTS.md)
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDashboardData());
   }
@@ -91,8 +111,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     TabRefreshBus.removeListener(_onTabSelected);
+    _autoRefresh.dispose();
     super.dispose();
   }
+
+  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
+  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
+  bool _isRouteVisible() =>
+      mounted && (ModalRoute.of(context)?.isCurrent ?? true);
 
   /// ผู้ใช้เพิ่งกดแท็บ — เรียกเฉพาะตอนที่เป็นแท็บนี้ แล้วปล่อยให้ [DashboardService]
   /// ตัดสินใจอีกชั้นว่าจะยิงเซิร์ฟเวอร์หรือคืนแคชเดิม (ยังไม่ครบ 4 วินาที)
@@ -101,28 +127,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadDashboardData();
   }
 
+  /// ครบรอบจากตัวจับเวลา — เงียบเหมือนการกดแท็บ (ไม่ขึ้นสปินเนอร์เต็มจอ
+  /// เพราะข้อมูลชุดเดิมยังแสดงอยู่)
+  void _refreshFromTimer() => _loadDashboardData();
+
   /// [force] = ผู้ใช้สั่งเอง ข้ามแคชในหน่วยความจำ
   Future<void> _loadDashboardData({bool force = false}) async {
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _error = '';
-      });
+    if (_fetching) {
+      // ตัวจับเวลายิงทับคำขอเดิมปล่อยผ่านได้ (รอบหน้ารออยู่อีก 1 นาที) แต่คำสั่ง
+      // ของผู้ใช้ต้องไม่หาย
+      if (force) _pendingForcedLoad = true;
+      return;
     }
+    _fetching = true;
+    try {
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _error = '';
+        });
+      }
 
-    final bundle = await (force ? widget.loadFresh() : widget.load());
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _isFirstLoad = false;
-      _bundle = bundle;
-      _error = bundle.error;
+      final bundle = await (force ? widget.loadFresh() : widget.load());
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isFirstLoad = false;
+        _bundle = bundle;
+        _error = bundle.error;
 
-      // รีเฟรชทุกครั้งเริ่มนับหน้าใหม่ที่ 1 — รายการเดิมถูกแทนที่ด้วยหน้าแรก
-      // ล่าสุดจากเซิร์ฟเวอร์
-      _publicReports = bundle.publicReports;
-      _publicTotal = bundle.publicReportsTotal;
-    });
+        // รีเฟรชทุกครั้งเริ่มนับหน้าใหม่ที่ 1 — รายการเดิมถูกแทนที่ด้วยหน้าแรก
+        // ล่าสุดจากเซิร์ฟเวอร์
+        _publicReports = bundle.publicReports;
+        _publicTotal = bundle.publicReportsTotal;
+      });
+    } finally {
+      _fetching = false;
+      if (_pendingForcedLoad) {
+        _pendingForcedLoad = false;
+        if (mounted) unawaited(_loadDashboardData(force: true));
+      }
+    }
   }
 
   @override
@@ -297,49 +342,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildStatGrid(DashboardSummary summary) {
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                icon: Icons.check_circle,
-                label: 'ไฟล์ทั้งหมด',
-                value: _formatNumber(summary.totalFiles.resolvedTotal),
-                color: _cyanColor,
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.check_circle,
+                  label: 'ไฟล์ทั้งหมด',
+                  value: _formatNumber(summary.totalFiles.resolvedTotal),
+                  color: _cyanColor,
+                  // บรรทัดรองแบบเดียวกับ StatCard ของหน้าเว็บ — ตัวเลขไฟล์ที่
+                  // สำเร็จของทั้งระบบไม่ได้แสดงที่อื่นเลย
+                  subtitle:
+                      'สำเร็จ ${_formatNumber(summary.totalFiles.success)} รายการ',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                icon: Icons.person,
-                label: 'ไฟล์ของฉัน',
-                value: _formatNumber(summary.userFiles.resolvedTotal),
-                color: _blueColor,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.person,
+                  label: 'ไฟล์ของฉัน',
+                  value: _formatNumber(summary.userFiles.resolvedTotal),
+                  color: _blueColor,
+                  subtitle:
+                      'รอวิเคราะห์ ${_formatNumber(summary.userFiles.pending)} รายการ',
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                icon: Icons.trending_up,
-                label: 'อัตราความสำเร็จ',
-                value: '${summary.totalFiles.successRate.toStringAsFixed(1)}%',
-                color: Colors.green,
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.trending_up,
+                  label: 'อัตราความสำเร็จ',
+                  value: '${summary.totalFiles.successRate.toStringAsFixed(1)}%',
+                  color: Colors.green,
+                  subtitle: 'โดยรวมทั้งหมด',
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatCard(
-                icon: Icons.people,
-                label: 'ผู้ใช้งานทั้งหมด',
-                value: _formatNumber(summary.totalUsers),
-                color: Colors.orange,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildStatCard(
+                  icon: Icons.people,
+                  label: 'ผู้ใช้งานทั้งหมด',
+                  value: _formatNumber(summary.totalUsers),
+                  color: Colors.orange,
+                  subtitle: 'สมาชิกที่ลงทะเบียน',
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         const SizedBox(height: 16),
         _buildStatusBreakdown(summary),
       ],
@@ -468,7 +521,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               label: 'ดูทั้งหมด',
               icon: Icons.arrow_forward,
               isLoading: false,
-              onTap: () => Get.toNamed('/public-reports'),
+              // สลับไปแท็บ Public แทนการ push หน้าซ้อนทับ — รายการเต็มจะได้มี
+              // ตัวเดียวในแอป (จำสถานะ/ตัวกรองไว้) เหมือนปุ่มของกิจกรรมล่าสุด
+              onTap: () => TabRefreshBus.select(TabRefreshBus.publicTab),
             ),
           ],
         ],
@@ -532,6 +587,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // ผู้อัปโหลดเป็นบรรทัดของตัวเอง เหมือนการ์ดในหน้าเว็บ
+                    if (report.uploadedByUsername != null &&
+                        report.uploadedByUsername!.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      _buildUploaderLine(report.uploadedByUsername!),
+                    ],
                   ],
                 ),
               ),
@@ -574,7 +635,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// บรรทัดรอง: ขนาดไฟล์ · เวลา · ผู้อัปโหลด
+  /// บรรทัดรอง: ขนาดไฟล์ · เวลา (ผู้อัปโหลดย้ายไปบรรทัดของตัวเองพร้อม avatar)
   String _subtitleFor(AnalysisHistoryItem report) {
     final parts = <String>[];
     final size = _formatSize(report.fileSize);
@@ -583,9 +644,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (created != null) {
       parts.add(_dateFormat.format(created.toLocal()));
     }
-    final uploader = report.uploadedByUsername;
-    if (uploader != null && uploader.isNotEmpty) parts.add(uploader);
     return parts.isEmpty ? '-' : parts.join(' • ');
+  }
+
+  /// ผู้อัปโหลด: วงกลมตัวอักษรแรก + ชื่อ — แบบเดียวกับ avatar ในการ์ดของหน้าเว็บ
+  ///
+  /// หน้าเว็บยิงรูปจริงจาก `uploaded_by.avatar_url` แต่ฝั่งมือถือใช้ตัวอักษรแทน:
+  /// รูปต้องโหลดผ่านเครือข่ายทุกครั้งที่แคชหลุด และบนข้อมูลจริง endpoint รูป
+  /// ตอบ 404 (ไฟล์ .jpg ที่ฐานข้อมูลชี้ไว้ไม่มีอยู่ในโฟลเดอร์ avatars/) —
+  /// ตัวอักษรคมกว่า เร็วกว่า และไม่มีทางขึ้นเป็นรูปแตก
+  Widget _buildUploaderLine(String username) {
+    final trimmed = username.trim();
+    final initial = trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)],
+            ),
+          ),
+          child: Text(
+            initial,
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            username,
+            style: TextStyle(fontSize: 11, color: _hintColor),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 
   /// เวลาของกิจกรรมล่าสุด ใช้รูปแบบเดียวกับรายงานสาธารณะ
@@ -861,14 +966,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                entry.fileType.isEmpty ? '-' : entry.fileType,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _textColor,
+              // ชื่อหมวดจาก backend ('Windows Executable') ไม่ใช่รหัสดิบ
+              // ('windows-exe') พร้อมจำนวนตัวอย่างที่รองรับค่าเฉลี่ยนั้น
+              // ใช้ Text.rich เพื่อให้ทั้งบรรทัดตัดด้วย ellipsis เมื่อจอแคบ
+              Expanded(
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: entry.displayName.isEmpty ? '-' : entry.displayName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _textColor,
+                        ),
+                      ),
+                      if (entry.sampleCount > 0)
+                        TextSpan(
+                          text:
+                              '  ${entry.scoredCount}/${entry.sampleCount} ไฟล์',
+                          style: TextStyle(fontSize: 11, color: _hintColor),
+                        ),
+                    ],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${score.toStringAsFixed(0)}/100',
                 style: TextStyle(
@@ -897,21 +1022,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               runSpacing: 6,
               children: [
                 for (final tool in entry.toolScores)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _tierColor(tool.value).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: _tierColor(tool.value).withValues(alpha: 0.2),
+                  Tooltip(
+                    // ชื่อเต็มของเครื่องมือ + บอกว่าเป็นค่าเฉลี่ย (หน้าเว็บใส่ title ไว้)
+                    message:
+                        '${tool.title} (ค่าเฉลี่ย): ${tool.value.round()}/100',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
                       ),
-                    ),
-                    child: Text(
-                      '${tool.label} ${tool.value.round()}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _tierColor(tool.value),
+                      decoration: BoxDecoration(
+                        color: _tierColor(tool.value).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: _tierColor(tool.value).withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        '${tool.label} ${tool.value.round()}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: _tierColor(tool.value),
+                        ),
                       ),
                     ),
                   ),
@@ -933,19 +1066,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
       subtitle: '10 อันดับมัลแวร์ที่พบมากที่สุด',
       icon: Icons.bug_report,
       iconColor: Colors.red,
-      trailing: _buildPeriodSelector(),
+      // ตัวเลือกช่วงเวลาเต็มความกว้าง อยู่ใต้หัวข้อเสมอ — ต้องกดสลับได้แม้ชุด
+      // ที่กำลังดูอยู่จะว่าง (เช่น รายวันว่างแต่ทั้งหมดมีข้อมูล)
+      belowHeader: _buildPeriodSelector(),
       isEmpty: list.isEmpty,
-      emptyMessage: 'ไม่มีข้อมูลในขณะนี้',
+      emptyMessage: _emptyMalwareMessage(),
+      emptyWidget: _buildMalwareEmptyHint(summary),
       child: Column(
         children: [
-          _buildMalwareChart(list),
-          const SizedBox(height: 16),
           for (var i = 0; i < list.length && i < 10; i++) ...[
             if (i > 0) const SizedBox(height: 10),
             _buildMalwareRow(list[i], i, list),
           ],
         ],
       ),
+    );
+  }
+
+  /// ข้อความว่างให้ตรงกับช่วงเวลาที่เลือก (แบบเดียวกับ TIME_RANGE_EMPTY_TEXT
+  /// ของหน้าเว็บ) — "ไม่มีข้อมูลในขณะนี้" ทำให้แยกไม่ออกว่าไม่มีเลยหรือไม่มีวันนี้
+  String _emptyMalwareMessage() => switch (_selectedRange) {
+    'daily' => 'ไม่พบมัลแวร์จากการสแกนในวันนี้',
+    'monthly' => 'ไม่พบมัลแวร์จากการสแกนในเดือนนี้',
+    _ => 'ยังไม่พบมัลแวร์จากการสแกนเลย',
+  };
+
+  static String _rangeLabel(String range) => switch (range) {
+    'daily' => 'รายวัน',
+    'monthly' => 'รายเดือน',
+    _ => 'ทั้งหมด',
+  };
+
+  /// ช่วงที่เลือกว่าง แต่ช่วงอื่นมีข้อมูล — บอกทางออกให้ผู้ใช้กดต่อได้เลย
+  ///
+  /// หน้าเว็บทำแบบเดียวกัน ('ดูผลรายเดือน (10 ประเภท)') เพราะข้อมูลรายวันว่าง
+  /// เกือบตลอด ถ้าปล่อยให้เห็นแค่คำว่าไม่พบข้อมูล ผู้ใช้จะนึกว่าระบบไม่มีข้อมูลเลย
+  Widget _buildMalwareEmptyHint(DashboardSummary summary) {
+    final others = ['daily', 'monthly', 'all']
+        .where(
+          (range) =>
+              range != _selectedRange &&
+              summary.topMalwareTypes.forRange(range).isNotEmpty,
+        )
+        .toList();
+    if (others.isEmpty) return _buildEmptyState(Icons.bar_chart, _emptyMalwareMessage());
+
+    return Column(
+      children: [
+        _buildEmptyState(Icons.bar_chart, _emptyMalwareMessage()),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            for (final range in others)
+              OutlinedButton(
+                key: Key('malware-range-$range'),
+                onPressed: () => setState(() => _selectedRange = range),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _cyanColor,
+                  side: BorderSide(color: _cyanColor.withValues(alpha: 0.4)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                child: Text(
+                  'ดูผล${_rangeLabel(range)} '
+                  '(${summary.topMalwareTypes.forRange(range).length} ประเภท)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -956,11 +1150,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
+      // แบ่งความกว้างเท่ากันทั้งสามปุ่ม — ปุ่มที่สามเคยอยู่เป็น `trailing` ของ
+      // หัวข้อ แล้วล้นจอ 360dp พร้อมตัดข้อความหัวข้อจนอ่านไม่ได้
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildPeriodButton('รายวัน', 'daily'),
-          _buildPeriodButton('รายเดือน', 'monthly'),
+          Expanded(child: _buildPeriodButton('รายวัน', 'daily')),
+          Expanded(child: _buildPeriodButton('รายเดือน', 'monthly')),
+          // ชุด 'all' มากับ response เดียวกัน — หน้าเว็บมีสามปุ่มนี้และเริ่มที่
+          // 'ทั้งหมด' เพราะข้อมูลรายวันมักว่าง
+          Expanded(child: _buildPeriodButton('ทั้งหมด', 'all')),
         ],
       ),
     );
@@ -971,15 +1169,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return InkWell(
       // สองชุดข้อมูลมาพร้อมกันใน response เดียวกัน จึงไม่ต้องยิงซ้ำ
       onTap: () => setState(() => _selectedRange = range),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? _cyanColor.withValues(alpha: 0.2) : Colors.transparent,
+          color: isSelected
+              ? _cyanColor.withValues(alpha: 0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: _cyanColor.withValues(alpha: 0.5)) : null,
+          border: isSelected
+              ? Border.all(color: _cyanColor.withValues(alpha: 0.5))
+              : null,
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -1003,114 +1209,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color(0xFF84CC16),
   ];
 
-  Widget _buildMalwareChart(List<MalwareTypeEntry> entries) {
-    final data = entries.take(10).toList();
-    final maxCount = data.fold<int>(0, (m, e) => e.count > m ? e.count : m);
-    if (maxCount == 0) return const SizedBox.shrink();
-
-    return SizedBox(
-      height: 220,
-      child: BarChart(
-        BarChartData(
-          alignment: BarChartAlignment.spaceAround,
-          maxY: maxCount * 1.2,
-          barTouchData: BarTouchData(
-            enabled: true,
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                final entry = data[groupIndex];
-                return BarTooltipItem(
-                  '${entry.type}\n${entry.count} ครั้ง',
-                  TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                );
-              },
-            ),
-          ),
-          titlesData: FlTitlesData(
-            show: true,
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 28,
-                getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
-                  if (index < 0 || index >= data.length) {
-                    return const SizedBox.shrink();
-                  }
-                  final name = data[index].type;
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      name.length > 6 ? name.substring(0, 6) : name,
-                      style: TextStyle(fontSize: 9, color: _hintColor),
-                    ),
-                  );
-                },
-              ),
-            ),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 32,
-                getTitlesWidget: (value, meta) => Text(
-                  value.toInt().toString(),
-                  style: TextStyle(fontSize: 9, color: _hintColor),
-                ),
-              ),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-          ),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.white.withValues(alpha: 0.1),
-              strokeWidth: 1,
-            ),
-          ),
-          borderData: FlBorderData(show: false),
-          barGroups: [
-            for (var i = 0; i < data.length; i++)
-              BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: data[i].count.toDouble(),
-                    color: _malwareColors[i % _malwareColors.length],
-                    width: 14,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(4),
-                      topRight: Radius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMalwareRow(MalwareTypeEntry entry, int index, List<MalwareTypeEntry> all) {
     final maxCount = all.fold<int>(0, (m, e) => e.count > m ? e.count : m);
     final ratio = maxCount == 0 ? 0.0 : entry.count / maxCount;
     final color = _malwareColors[index % _malwareColors.length];
+    // ที่ 1 ทอง + ป้าย 'พบมากที่สุด', 2 เงิน, 3 ทองแดง — สีเดียวกับที่หน้าเว็บใช้
+    final rank = _rankStyle(index);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: rank.top
+              ? _rankGold.withValues(alpha: 0.35)
+              : color.withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         children: [
@@ -1119,7 +1234,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.2),
+              color: rank.background,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -1127,7 +1242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: color,
+                color: rank.foreground,
               ),
             ),
           ),
@@ -1136,15 +1251,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  entry.type,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: _textColor,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                // Wrap (ไม่ใช่ Row) เหมือน flex-wrap ของหน้าเว็บ — ชื่อมัลแวร์ยาว ๆ
+                // กับป้าย 'พบมากที่สุด' ต้องตัดบรรทัดได้ ไม่ล้นการ์ดบนจอ 360dp
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      entry.type,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _textColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (rank.top) _buildTopBadge(),
+                  ],
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
@@ -1165,6 +1290,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: TextStyle(fontSize: 12, color: _hintColor),
           ),
         ],
+      ),
+    );
+  }
+
+  static const Color _rankGold = Color(0xFFF59E0B);
+
+  /// ป้ายอันดับตามลำดับความเด่น (ที่มาของสี: badgeClass ในหน้าเว็บ)
+  static ({Color background, Color foreground, bool top}) _rankStyle(int index) {
+    return switch (index) {
+      0 => (
+        background: const Color(0xFFFCD34D),
+        foreground: const Color(0xFF0F172A),
+        top: true,
+      ),
+      1 => (
+        background: const Color(0xFFE2E8F0),
+        foreground: const Color(0xFF0F172A),
+        top: false,
+      ),
+      2 => (
+        background: const Color(0xFFFDBA74),
+        foreground: const Color(0xFF0F172A),
+        top: false,
+      ),
+      _ => (
+        background: Colors.white.withValues(alpha: 0.08),
+        foreground: const Color(0xFFCBD5E1),
+        top: false,
+      ),
+    };
+  }
+
+  /// ป้าย 'พบมากที่สุด' ของอันดับ 1 (หน้าเว็บวางไว้ข้างชื่อมัลแวร์)
+  Widget _buildTopBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: _rankGold.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _rankGold.withValues(alpha: 0.3)),
+      ),
+      child: const Text(
+        'พบมากที่สุด',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFFFBBF24),
+        ),
       ),
     );
   }
@@ -1217,6 +1390,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String emptyMessage,
     required Widget child,
     Widget? trailing,
+    Widget? belowHeader,
+    Widget? emptyWidget,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1254,7 +1429,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        if (isEmpty) _buildEmptyState(icon, emptyMessage) else child,
+        // ตัวควบคุมที่ต้องกดได้ตลอด แม้ส่วนเนื้อหาจะว่าง (เช่น ตัวเลือกช่วงเวลา)
+        if (belowHeader != null) ...[belowHeader, const SizedBox(height: 12)],
+        if (isEmpty)
+          emptyWidget ?? _buildEmptyState(icon, emptyMessage)
+        else
+          child,
       ],
     );
   }
@@ -1290,6 +1470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String label,
     required String value,
     required Color color,
+    String? subtitle,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1334,16 +1515,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(fontSize: 10, color: _hintColor),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
   }
 
+  /// ป้ายสถานะของการ์ดรายงานสาธารณะ — ใช้ข้อความไทยชุดเดียวกับแท็บ Reports
+  /// และ Public Reports (เดิมโชว์ค่าดิบของ backend ว่า 'success' ปนอยู่ทั้งที่
+  /// หน้าจอเดียวกันเขียน 'สำเร็จ' — อ่านแล้วเหมือนเป็นข้อมูลคนละชุด)
   Widget _buildStatusBadge(String status) {
-    final (color, label) = switch (status) {
-      'success' => (Colors.green, status),
-      'failed' => (Colors.red, status),
-      'pending' => (Colors.orange, status),
+    final (color, label) = switch (status.toLowerCase()) {
+      'success' => (Colors.green, 'สำเร็จ'),
+      'processing' || 'analyzing' => (Colors.amber, 'กำลังวิเคราะห์'),
+      'pending' || 'dispatching' || 'queued' => (Colors.orange, 'รอดำเนินการ'),
+      'failed' => (Colors.red, 'ไม่สำเร็จ'),
       _ => (_hintColor, status),
     };
 

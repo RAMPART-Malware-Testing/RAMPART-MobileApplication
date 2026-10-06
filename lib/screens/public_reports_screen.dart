@@ -7,6 +7,9 @@ import 'package:intl/intl.dart';
 import '../models/analysis.dart';
 import '../models/dashboard_stats.dart';
 import '../services/dashboard_service.dart';
+import '../services/tab_auto_refresh.dart';
+import '../services/tab_cache.dart';
+import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
 import '../widgets/report_filter_bar.dart';
 
@@ -41,10 +44,24 @@ typedef PublicReportsLoader = Future<PublicReportsPage> Function(
 /// หน้า dashboard โชว์แค่ 5 อันดับแรก ปุ่ม "ดูทั้งหมด" พามาที่นี่ ซึ่งทำหน้าที่
 /// เดียวกับแท็บ Reports แต่เป็นของ *ทุกคน* ไม่ใช่เฉพาะของผู้ใช้ และดึงจาก
 /// `POST /api/analy/v1/dashboard/reports` ซึ่งรับ page/limit ได้จริง
+///
+/// ใช้งานได้สองแบบ: แท็บที่ 4 ของ [MainScreen] (ส่ง [asTab] = true) หรือหน้าที่ถูก
+/// push ทับบนเส้นทาง `/public-reports`
 class PublicReportsScreen extends StatefulWidget {
-  const PublicReportsScreen({super.key, this.loadPage = defaultLoadPage});
+  const PublicReportsScreen({
+    super.key,
+    this.loadPage = defaultLoadPage,
+    this.asTab = false,
+  });
 
   final PublicReportsLoader loadPage;
+
+  /// true เมื่อหน้านี้ถูกฝังเป็นแท็บของ `MainScreen`
+  ///
+  /// สองผลที่ตามมา: ซ่อนปุ่มย้อนกลับ (กดย้อนจากแท็บจะปิดทั้งหน้าแรก ซึ่งไม่ใช่
+  /// สิ่งที่ผู้ใช้ต้องการ) และยังไม่ยิงข้อมูลตอนเปิดแอป เพราะ dashboard ดึง
+  /// หน้าแรกของรายงานสาธารณะไปแล้วในชุดเดียว — จะยิงเมื่อผู้ใช้กดแท็บเข้ามาจริง
+  final bool asTab;
 
   static Future<PublicReportsPage> defaultLoadPage(PublicReportsQuery query) {
     return dashboardService.loadPublicReportsPage(
@@ -84,20 +101,76 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
   bool _loadingMore = false;
   String _error = '';
 
+  /// กำลังรีเฟรชเงียบอยู่ (แตะแท็บ / ตัวจับเวลา 1 นาที) — แยกจาก [_loading] เพราะ
+  /// ต้องไม่ล้างรายการเดิมทิ้ง แต่ยังบอกผู้ใช้ว่ากำลังยิงข้อมูลใหม่
+  bool _refreshing = false;
+
+  /// คำขอหน้าแรกยังวิ่งอยู่ — กันตัวจับเวลากับการกดแท็บยิงซ้อนคำขอเดิม
+  bool _fetching = false;
+
+  /// คำสั่งของผู้ใช้ (เปลี่ยนตัวกรอง/กดโหลดใหม่) มาถึงระหว่างที่คำขอเดิมยังวิ่งอยู่
+  /// — ห้ามทิ้ง ต้องยิงต่อทันทีที่คำขอเดิมเสร็จ ไม่งั้นตัวกรองที่โชว์กับข้อมูลที่เห็น
+  /// จะไม่ตรงกัน
+  bool _pendingFirstPage = false;
+
+  /// เวลาที่ดึงหน้าแรกสำเร็จครั้งล่าสุด — กดแท็บเข้ามาใหม่ภายใน [TabCache.ttl]
+  /// ยังใช้ของเดิมได้ ไม่ต้องยิงซ้ำ
+  DateTime? _lastLoadedAt;
+
+  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
+  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
+  TabAutoRefresh? _autoRefresh;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    _loadFirstPage();
+
+    if (!widget.asTab) {
+      _loadFirstPage();
+      return;
+    }
+
+    TabRefreshBus.addListener(_onTabSelected);
+    _autoRefresh = TabAutoRefresh(
+      tabIndex: TabRefreshBus.publicTab,
+      onRefresh: _refreshFromTimer,
+      isVisible: _isRouteVisible,
+    );
+    // แท็บนี้ถูกสร้างค้างไว้ตั้งแต่เปิดแอป (IndexedStack) — โหลดเฉพาะเมื่อถูกเลือก
+    // อยู่จริง ถ้าเปิดแอปมาที่แท็บอื่น (กรณีปกติ) จะรอจนผู้ใช้กดแท็บเข้ามา
+    if (TabRefreshBus.currentIndex == TabRefreshBus.publicTab) _loadFirstPage();
   }
 
   @override
   void dispose() {
+    TabRefreshBus.removeListener(_onTabSelected);
+    _autoRefresh?.dispose();
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
+  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
+  bool _isRouteVisible() =>
+      mounted && (ModalRoute.of(context)?.isCurrent ?? true);
+
+  /// ผู้ใช้เพิ่งกดแท็บ Public Reports
+  void _onTabSelected() {
+    if (TabRefreshBus.currentIndex != TabRefreshBus.publicTab) return;
+    if (_fetching || _loadingMore) return;
+    final at = _lastLoadedAt;
+    if (at != null && DateTime.now().difference(at) < TabCache.ttl) return;
+    _loadFirstPage(silent: _items.isNotEmpty);
+  }
+
+  /// ครบรอบจากตัวจับเวลา — ยิงเงียบเสมอ เพราะผู้ใช้อาจกำลังอ่านรายการอยู่
+  void _refreshFromTimer() {
+    if (_fetching || _loadingMore || _refreshing) return;
+    _loadFirstPage(silent: true);
   }
 
   void _onScroll() {
@@ -119,29 +192,73 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     sortDirection: _sortDirection,
   );
 
-  Future<void> _loadFirstPage() async {
-    if (_scrollController.hasClients) _scrollController.jumpTo(0);
+  /// ดึงหน้าแรกใหม่ด้วยตัวกรองปัจจุบัน
+  ///
+  /// [silent] = รีเฟรชเบื้องหลัง (แตะแท็บ / ตัวจับเวลา) — ไม่ล้างรายการที่แสดงอยู่
+  /// และถ้าดึงไม่สำเร็จให้คงของเดิมไว้ ต่างจากการโหลดที่ผู้ใช้สั่งเองซึ่งต้องเห็น
+  /// สปินเนอร์และรู้ว่าเกิดอะไรขึ้น
+  Future<void> _loadFirstPage({bool silent = false}) async {
+    if (_fetching || _loadingMore || _refreshing) {
+      // ตัวจับเวลายิงทับคำขอเดิมปล่อยผ่านได้ (รอบหน้ารออยู่อีก 1 นาที) แต่คำสั่ง
+      // ของผู้ใช้ต้องไม่หาย
+      if (!silent) _pendingFirstPage = true;
+      return;
+    }
+    if (!silent && _scrollController.hasClients) _scrollController.jumpTo(0);
+
     setState(() {
-      _loading = true;
-      _error = '';
+      if (silent) {
+        _refreshing = true;
+      } else {
+        _loading = true;
+        _error = '';
+      }
     });
 
-    final result = await widget.loadPage(_query(1));
+    _fetching = true;
+    final PublicReportsPage result;
+    try {
+      result = await widget.loadPage(_query(1));
+    } finally {
+      _fetching = false;
+    }
     if (!mounted) return;
 
     setState(() {
       _loading = false;
+      _refreshing = false;
+      if (result.error.isNotEmpty) {
+        // ของเดิมที่แสดงอยู่มีค่ากว่า error — ไม่ทับด้วยหน้าจอว่าง
+        if (silent && _items.isNotEmpty) return;
+        _items = const [];
+        _page = 1;
+        _total = 0;
+        _totalPages = 0;
+        _hasNext = false;
+        _error = result.error;
+        return;
+      }
       _page = 1;
       _total = result.total;
       _totalPages = _pagesOf(result.total);
       _hasNext = result.hasMore;
-      _error = result.error;
-      _items = result.error.isEmpty ? result.items : const [];
+      _error = '';
+      _items = result.items;
+      _lastLoadedAt = DateTime.now();
     });
+
+    _drainPendingFirstPage();
+  }
+
+  /// ยิงคำขอที่ผู้ใช้สั่งค้างไว้ตอนที่ยังมีคำขออื่นวิ่งอยู่
+  void _drainPendingFirstPage() {
+    if (!_pendingFirstPage) return;
+    _pendingFirstPage = false;
+    _loadFirstPage();
   }
 
   Future<void> _loadNextPage() async {
-    if (_loading || _loadingMore || !_hasNext) return;
+    if (_loading || _loadingMore || _refreshing || !_hasNext) return;
     setState(() => _loadingMore = true);
 
     final next = _page + 1;
@@ -157,6 +274,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+      _drainPendingFirstPage();
       return;
     }
 
@@ -176,6 +294,8 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       }
       _hasNext = result.hasMore;
     });
+
+    _drainPendingFirstPage();
   }
 
   void _onSearchChanged(String value) {
@@ -281,17 +401,19 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+      // ไม่มีปุ่มย้อนกลับในโหมดแท็บ จึงไม่ต้องเว้นที่ให้ปุ่ม
+      padding: EdgeInsets.fromLTRB(widget.asTab ? 16 : 8, widget.asTab ? 16 : 8, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              IconButton(
-                tooltip: 'ย้อนกลับ',
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: popAnalysisScreen,
-              ),
+              if (!widget.asTab)
+                IconButton(
+                  tooltip: 'ย้อนกลับ',
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: popAnalysisScreen,
+                ),
               const Expanded(
                 child: Text(
                   'Public Reports',
@@ -306,7 +428,9 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
               IconButton(
                 tooltip: 'โหลดใหม่',
                 icon: const Icon(Icons.refresh, color: AnalysisColors.cyan),
-                onPressed: _loading ? null : _loadFirstPage,
+                onPressed: (_loading || _fetching || _refreshing)
+                    ? null
+                    : _loadFirstPage,
               ),
             ],
           ),
@@ -350,6 +474,16 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
             sortDirection: _sortDirection,
             onSort: _selectSort,
           ),
+          // สัญญาณว่ากำลังรีเฟรชเงียบอยู่ (แตะแท็บ / ตัวจับเวลานาที) — แถบนี้มี
+          // เฉพาะตอนมีคำขอวิ่งอยู่ ไม่ใช่ ticker ค้าง (R2)
+          if (_refreshing) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: AnalysisColors.cyan,
+              backgroundColor: Color(0x2200E5FF),
+            ),
+          ],
         ],
       ),
     );

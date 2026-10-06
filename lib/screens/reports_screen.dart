@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../models/analysis.dart';
 import '../services/analysis_service.dart';
 import '../services/session_guard.dart';
+import '../services/tab_auto_refresh.dart';
 import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
 import '../widgets/report_filter_bar.dart';
@@ -61,6 +62,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// ผู้ใช้กดแท็บขณะที่คำขอเดิมยังค้างอยู่ — เก็บไว้ยิงต่อเมื่อคำขอเดิมเสร็จ
   /// เดิมกดแล้ว `return` ทิ้งทันที กดกี่ครั้งก็ไม่มีผลจนกว่าคำขอเดิมจะเสร็จ
   bool _pendingTabRefresh = false;
+
+  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
+  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
+  late final TabAutoRefresh _autoRefresh;
   String? _error;
   String _selectedStatus = '';
   String _selectedFileType = '';
@@ -73,12 +78,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     TabRefreshBus.addListener(_onTabSelected);
+    _autoRefresh = TabAutoRefresh(
+      tabIndex: TabRefreshBus.reportsTab,
+      onRefresh: _refreshFromTimer,
+      isVisible: _isRouteVisible,
+    );
     _loadFirstPage();
   }
 
   @override
   void dispose() {
     TabRefreshBus.removeListener(_onTabSelected);
+    _autoRefresh.dispose();
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -101,12 +112,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
   /// ส่วนจะใช้แคชในหน่วยความจำหรือยิงใหม่ ปล่อยให้ `TabCache` (อายุ 4 วินาที) ตัดสิน
   void _onTabSelected() {
     if (TabRefreshBus.currentIndex != TabRefreshBus.reportsTab) return;
+    // กำลังรีเฟรชเงียบอยู่ (ตัวจับเวลาหรือการกดแท็บครั้งก่อน) — ข้อมูลใหม่กำลัง
+    // มาถึงแล้ว ยิงซ้ำตอนนี้มีแต่เปลือง
+    if (_refreshing) return;
     // คำขอเดิมยังค้าง — Dio รอได้ถึง 30 วินาที ถ้าทิ้งการกดไปเฉย ๆ ผู้ใช้จะ
     // กดซ้ำอีกกี่ครั้งก็ยังไม่มีผล จำไว้ยิงต่อเมื่อคำขอเดิมเสร็จแทน
     if (_loading || _loadingMore) {
       _pendingTabRefresh = true;
       return;
     }
+    _loadFirstPage(silent: true);
+  }
+
+  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
+  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
+  bool _isRouteVisible() =>
+      mounted && (ModalRoute.of(context)?.isCurrent ?? true);
+
+  /// ครบรอบจากตัวจับเวลา — ต่างจากการกดแท็บตรงที่ถ้ากำลังยิงอยู่แล้วปล่อยรอบนี้
+  /// ผ่านไปเลย ไม่ต้องจำไว้ยิงต่อ (รอบหน้าอีก 1 นาทีรออยู่)
+  void _refreshFromTimer() {
+    if (_loading || _loadingMore || _refreshing) return;
     _loadFirstPage(silent: true);
   }
 

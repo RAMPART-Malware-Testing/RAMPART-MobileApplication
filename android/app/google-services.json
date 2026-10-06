@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "223597192413",
-    "project_id": "rampart-f25c5",
-    "storage_bucket": "rampart-f25c5.firebasestorage.app"
+    "project_number": "652420783867",
+    "project_id": "rampart-d15ed",
+    "storage_bucket": "rampart-d15ed.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:223597192413:android:bff44bf0a659712c802734",
+        "mobilesdk_app_id": "1:652420783867:android:f1dcf336c3f1b35a655a5e",
         "android_client_info": {
-          "package_name": "com.example.rampart"
+          "package_name": "com.rampart.mobile"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC_J9GQ-s08A2KBtaHj0HPv6bLTyAM-Utk"
+          "current_key": "AIzaSyDqfJRdrvWr_d4nhqFzGCb1CprZA2yipns"
         }
       ],
       "services": {
