@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../components/recaptcha_sheet.dart';
 import '../services/authService.dart';
 import '../services/profile_service.dart';
+import '../services/recaptcha_service.dart';
 import '../theme/app_theme.dart';
 
 /// หน้าตั้งรหัสผ่านใหม่สำหรับผู้ใช้ที่ล็อกอินอยู่ (เข้าจากหน้าโปรไฟล์/ตั้งค่า)
@@ -31,6 +33,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _saving = false;
+  bool _isRecaptchaVerified = false;
   String? _serverError;
 
   @override
@@ -54,10 +57,28 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _hasDigit(value) &&
       _hasSymbol(value);
 
+  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
+  Future<void> _openRecaptcha() async {
+    final token = await RecaptchaSheet.show(context);
+    if (!mounted || token == null || token.isEmpty) return;
+
+    final ok = await RecaptchaVerifyService.instance.verifyToken(token);
+    if (!mounted) return;
+    setState(() {
+      _isRecaptchaVerified = ok;
+      if (!ok) _serverError = 'ยืนยัน reCAPTCHA ไม่สำเร็จ กรุณาลองใหม่';
+    });
+  }
+
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     setState(() => _serverError = null);
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_isRecaptchaVerified) {
+      setState(() => _serverError = 'กรุณายืนยันตัวตนด้วย reCAPTCHA ก่อน');
+      return;
+    }
 
     setState(() => _saving = true);
     final result = await widget.submit(_newController.text);
@@ -132,7 +153,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     const SizedBox(height: 16),
                     _buildServerError(),
                   ],
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
+                  _buildRecaptcha(customColors),
+                  const SizedBox(height: 20),
                   _buildSaveButton(customColors),
                   const SizedBox(height: 16),
                   _buildFooterNote(customColors),
@@ -391,6 +414,50 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecaptcha(CustomColors customColors) {
+    return GestureDetector(
+      onTap: _openRecaptcha,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _isRecaptchaVerified
+              ? Colors.green.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isRecaptchaVerified
+                ? Colors.green
+                : customColors.cyanColor.withValues(alpha: 0.5),
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _isRecaptchaVerified
+                  ? Icons.check_box
+                  : Icons.check_box_outline_blank,
+              color: _isRecaptchaVerified ? Colors.green : customColors.hintColor,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _isRecaptchaVerified ? 'ยืนยันตัวตนสำเร็จ' : 'ฉันไม่ใช่บอท',
+                style: TextStyle(
+                  fontFamily: 'Kanit',
+                  color: _isRecaptchaVerified ? Colors.green : Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Icon(Icons.security, color: customColors.cyanColor, size: 20),
+          ],
+        ),
       ),
     );
   }

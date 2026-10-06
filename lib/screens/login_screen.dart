@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'package:rampart/components/animated_logo_component.dart';
+import 'package:rampart/components/recaptcha_sheet.dart';
+import 'package:rampart/services/recaptcha_service.dart';
 import 'package:rampart/services/authService.dart';
 import 'package:rampart/services/fcm_service.dart';
 import 'package:rampart/services/session_guard.dart';
@@ -41,6 +43,21 @@ class _LoginScreenState extends State<LoginScreen> {
     final token = FcmService().deviceToken.value;
     if (token != null) {
       await authService.registerFcmToken(token);
+    }
+  }
+
+  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
+  /// (เหมือนฝั่งเว็บ — site/secret key ฝังในแอปตามที่ตกลง ไม่ได้ส่งต่อไปที่ API)
+  Future<void> _openRecaptcha() async {
+    final token = await RecaptchaSheet.show(context);
+    if (!mounted || token == null || token.isEmpty) return;
+
+    final ok = await RecaptchaVerifyService.instance.verifyToken(token);
+    if (!mounted) return;
+    setState(() => _isRecaptchaVerified = ok);
+    if (!ok) {
+      _showSnackBar('ยืนยัน reCAPTCHA ไม่สำเร็จ กรุณาลองใหม่', Colors.red,
+          icon: Icons.error_outline);
     }
   }
 
@@ -325,7 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildRecaptcha() {
     return GestureDetector(
-      onTap: () => setState(() => _isRecaptchaVerified = !_isRecaptchaVerified),
+      onTap: _openRecaptcha,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.all(16),

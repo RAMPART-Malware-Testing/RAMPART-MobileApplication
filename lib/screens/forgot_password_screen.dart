@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'package:rampart/components/animated_logo_component.dart';
+import 'package:rampart/components/recaptcha_sheet.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/recaptcha_service.dart';
 import '../theme/app_theme.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -17,6 +19,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isRecaptchaVerified = false;
 
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
@@ -38,8 +41,29 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
+  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
+  /// (เหมือนหน้า login/register — site/secret key ฝังในแอป ไม่ได้ส่งต่อไปที่ API)
+  Future<void> _openRecaptcha() async {
+    final token = await RecaptchaSheet.show(context);
+    if (!mounted || token == null || token.isEmpty) return;
+
+    final ok = await RecaptchaVerifyService.instance.verifyToken(token);
+    if (!mounted) return;
+    setState(() => _isRecaptchaVerified = ok);
+    if (!ok) {
+      _showSnackBar('ยืนยัน reCAPTCHA ไม่สำเร็จ กรุณาลองใหม่', Colors.red,
+          icon: Icons.error_outline);
+    }
+  }
+
   Future<void> _handleSendOTP() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (!_isRecaptchaVerified) {
+      _showSnackBar('กรุณายืนยันตัวตนด้วย reCAPTCHA ก่อน', Colors.red,
+          icon: Icons.security_rounded);
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
@@ -190,7 +214,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             const SizedBox(height: 32),
 
             _buildEmailField(),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            _buildRecaptcha(),
+            const SizedBox(height: 24),
 
             _buildSendOTPButton(),
             const SizedBox(height: 24),
@@ -254,6 +281,50 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRecaptcha() {
+    return GestureDetector(
+      onTap: _openRecaptcha,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _isRecaptchaVerified
+              ? Colors.green.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _isRecaptchaVerified
+                ? Colors.green
+                : _cyanColor.withValues(alpha: 0.5),
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              _isRecaptchaVerified
+                  ? Icons.check_box
+                  : Icons.check_box_outline_blank,
+              color: _isRecaptchaVerified ? Colors.green : _hintColor,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                _isRecaptchaVerified ? 'ยืนยันตัวตนสำเร็จ' : 'ฉันไม่ใช่บอท',
+                style: TextStyle(
+                  fontFamily: 'Kanit',
+                  color: _isRecaptchaVerified ? Colors.green : _textColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Icon(Icons.security, color: _cyanColor, size: 20),
+          ],
+        ),
+      ),
     );
   }
 
