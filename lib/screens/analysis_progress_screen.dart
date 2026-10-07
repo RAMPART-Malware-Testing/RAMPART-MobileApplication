@@ -31,6 +31,12 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   TaskStatusResult? _last;
   String? _transientError;
 
+  /// ตรวจสถานะซ้ำอัตโนมัติหลังเจอ "ล้มเหลว" — backend แคชสถานะไว้ 3 วินาที
+  /// จึงมีโอกาสที่แอป อ่านค่าเก่า (failed) แล้วหยุด poll ทั้งที่งานสำเร็จจริง
+  static const int _maxVerifyRetries = 3;
+  int _verifyRetries = 0;
+  Timer? _verifyTimer;
+
   static const Map<String, String> _stageLabels = {
     'worker': 'กำลังเตรียมคิววิเคราะห์',
     'virustotal': 'ตรวจสอบกับ VirusTotal',
@@ -62,6 +68,7 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   void dispose() {
     _netWorker?.dispose();
     _timer?.cancel();
+    _verifyTimer?.cancel();
     super.dispose();
   }
 
@@ -117,7 +124,39 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
       // งานล้มเหลวจริง/ไม่พบงาน — หยุด poll แต่ต้องเหลือทางไปต่อ (ลองใหม่/เปิดรายงาน)
       _stopPolling();
       setState(() => _failed = true);
+      _scheduleVerifyRetry();
     }
+  }
+
+  /// ตรวจสถานะซ้ำเองอีกไม่กี่ครั้ง (ห่างกัน 3 วินาที = เกิน TTL ของแคชฝั่ง server)
+  /// ถ้าจริง ๆ งานสำเร็จแล้ว จะพาไปหน้ารายงานให้อัตโนมัติ ไม่ต้องให้ผู้ใช้กด
+  void _scheduleVerifyRetry() {
+    if (_verifyRetries >= _maxVerifyRetries) return;
+    _verifyRetries++;
+    _verifyTimer?.cancel();
+    _verifyTimer = Timer(const Duration(seconds: 3), () async {
+      if (!mounted || _taskId.isEmpty) return;
+      final result = await _service.getTaskStatus(_taskId);
+      if (!mounted) return;
+
+      if (result.isSuccess) {
+        _stopPolling();
+        if (Get.currentRoute == '/analysis-progress') {
+          Get.offNamed('/analysis-result', arguments: _taskId);
+        }
+        return;
+      }
+      if (result.isFailed || !result.success) {
+        _scheduleVerifyRetry();
+        return;
+      }
+      // กลับมารันต่อ (เช่น job ยังไม่จบจริง) — เริ่ม poll ปกติใหม่
+      setState(() {
+        _failed = false;
+        _last = result;
+      });
+      _startPolling();
+    });
   }
 
   /// ความล้มเหลวถาวร: งานถูกทำเครื่องหมาย failed, ไม่พบงาน, หรือถูกปฏิเสธสิทธิ์
@@ -137,6 +176,8 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
 
   void _restartPolling() {
     _stopPolling();
+    _verifyTimer?.cancel();
+    _verifyRetries = 0;
     _finished = false;
     setState(() {
       _failed = false;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -49,17 +51,50 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
   bool _privacySaving = false;
   late bool _isPrivate = true;
 
+  /// โหลดรายงานอัตโนมัติเมื่อยังไม่พร้อม — เปิดจากแจ้งเตือนแล้ว backend ยังไม่ทัน
+  /// เขียนเสร็จ/ยังไม่พร้อมอ่าน จะได้ไม่ต้องให้ผู้ใช้กดเอง
+  static const int _maxAutoRetries = 10;
+  static const Duration _autoRetryDelay = Duration(seconds: 3);
+  Timer? _autoRetryTimer;
+  int _autoRetries = 0;
+  bool _autoRetrying = false;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _autoRetryTimer?.cancel();
+    super.dispose();
+  }
+
+  /// ตั้งเวลาลองโหลดใหม่เอง (จำกัดจำนวนครั้ง) แล้วเลิกเงียบ ๆ ถ้าเกิน
+  void _scheduleAutoRetry() {
+    if (_autoRetries >= _maxAutoRetries) return;
+    _autoRetries++;
+    _autoRetryTimer?.cancel();
+    setState(() => _autoRetrying = true);
+    _autoRetryTimer = Timer(_autoRetryDelay, () {
+      if (!mounted) return;
+      _load(reload: true);
+    });
+  }
+
+  void _stopAutoRetry() {
+    _autoRetryTimer?.cancel();
+    _autoRetryTimer = null;
+    _autoRetrying = false;
+  }
+
+  Future<void> _load({bool reload = false}) async {
+    if (!reload) _autoRetries = 0;
     setState(() {
       _loading = true;
       _error = null;
-      _toolDetails.clear();
+      if (!reload) _toolDetails.clear();
     });
 
     final values = await Future.wait<Object>([
@@ -77,8 +112,11 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             ? status.message
             : 'ไม่พบรายงานนี้';
       });
+      // ยังไม่พร้อม → ลองดึงใหม่เองสักระยะ ก่อนปล่อยให้ผู้ใช้กดเอง
+      _scheduleAutoRetry();
       return;
     }
+    _stopAutoRetry();
 
     final report = status.report!;
     final profileData = profile['data'];
@@ -324,7 +362,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           IconButton(
             tooltip: 'โหลดใหม่',
             icon: const Icon(Icons.refresh, color: AnalysisColors.cyan),
-            onPressed: _loading ? null : _load,
+            onPressed: _loading ? null : () => _load(),
           ),
         ],
       ),
@@ -333,15 +371,17 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.hourglass_top, color: AnalysisColors.cyan, size: 34),
-            SizedBox(height: 12),
+            const Icon(Icons.hourglass_top, color: AnalysisColors.cyan, size: 34),
+            const SizedBox(height: 12),
             Text(
-              'กำลังโหลดรายงาน...',
-              style: TextStyle(
+              _autoRetrying
+                  ? 'กำลังดึงรายงานอัตโนมัติ... ($_autoRetries/$_maxAutoRetries)'
+                  : 'กำลังโหลดรายงาน...',
+              style: const TextStyle(
                 fontFamily: 'Kanit',
                 color: AnalysisColors.textSecondary,
               ),
@@ -400,9 +440,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 color: AnalysisColors.textSecondary,
               ),
             ),
+            if (_autoRetrying) ...[
+              const SizedBox(height: 8),
+              Text(
+                'กำลังดึงรายงานให้อัตโนมัติ... ($_autoRetries/$_maxAutoRetries)',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Kanit',
+                  fontSize: 12,
+                  color: AnalysisColors.cyan,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             OutlinedButton(
-              onPressed: _load,
+              onPressed: () => _load(),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AnalysisColors.cyan,
               ),

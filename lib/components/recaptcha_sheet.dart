@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-import '../core/config.dart';
 import '../services/recaptcha_service.dart';
 
 /// หน้าจอให้ผู้ใช้ยืนยัน reCAPTCHA จริงกับ Google (คีย์เดียวกับเว็บ)
 /// คืนค่าเป็น token ของ reCAPTCHA (หรือ null เมื่อผู้ใช้ปิด/ยืนยันไม่สำเร็จ)
 ///
-/// ตัววิดเจ็ตถูกโหลดจาก HTML ในแอป โดยตั้ง baseUrl เป็นโดเมนของ API
-/// (`Config.url_server`) ซึ่งถูกลงทะเบียนไว้กับ site key แล้ว เพื่อให้ Google
-/// ออก token ให้แอปได้โดยไม่ต้องมีหน้าเว็บโฮสต์อยู่จริง
-/// (baseUrl เป็นเพียงที่มาของเอกสาร ไม่ได้ถูกเรียกผ่านเครือข่าย)
+/// ตัววิดเจ็ตถูกโหลดจาก HTML ในแอป โดยตั้ง baseUrl เป็นโดเมนที่ลงทะเบียนไว้กับ
+/// site key แล้ว เพื่อให้ Google ออก token ให้แอปได้โดยไม่ต้องมีหน้าเว็บโฮสต์จริง
+/// (baseUrl เป็นเพียงที่มาของเอกสาร ไม่ได้ถูกเรียกผ่านเครือข่าย จึงใช้ได้แม้ tunnel ปิด)
+///
+/// ⚠️ ต้องเป็นโดเมนที่อยู่ในรายการ Domains ของคีย์ reCAPTCHA เท่านั้น — ห้ามผูกกับ
+/// `Config.url_server` เพราะตอนทดสอบกับ server ในเครื่องค่านั้นเป็น IP
+/// (เช่น 10.0.2.2) ซึ่ง Google ไม่รับ และจะขึ้น "ERROR for site owner" แทนวิดเจ็ต
 class RecaptchaSheet extends StatefulWidget {
   const RecaptchaSheet({Key? key}) : super(key: key);
 
-  static String get _baseUrl {
-    final url = Config.url_server;
-    return url.endsWith('/') ? url : '$url/';
-  }
+  /// โดเมนที่ลงทะเบียนกับคีย์ reCAPTCHA (ดูรายการได้ที่ Google reCAPTCHA console)
+  static const String _baseUrl =
+      'https://taneka-rarefied-regrettably.ngrok-free.dev/';
 
   static const String _html = '''
 <!doctype html>

@@ -163,28 +163,29 @@ Future<void> _showLocalNotification({
 }
 
 void _onNotificationTap(NotificationResponse response) {
-  final payload = response.payload;
-  if (payload == null || payload.isEmpty) return;
+  final parsed = _parseNotificationPayload(response.payload);
+  if (parsed == null) return;
+  _openFromPush(parsed.$1, parsed.$2);
+}
 
-  // payload รุ่นใหม่เป็น JSON ที่พา taskId มาด้วย ส่วนรุ่นเก่าเป็น route เดี่ยว ๆ
-  if (payload.startsWith('{')) {
-    try {
-      final decoded = jsonDecode(payload);
-      if (decoded is Map) {
-        final route = decoded['route'];
-        final taskId = decoded['task_id'];
-        _openFromPush(
-          route is String ? route : null,
-          taskId is String ? taskId : null,
-        );
+/// payload รุ่นใหม่เป็น JSON ที่พา taskId มาด้วย ส่วนรุ่นเก่าเป็น route เดี่ยว ๆ
+/// คืน null เมื่ออ่านไม่ได้/ไม่มี payload
+(String route, String? taskId)? _parseNotificationPayload(String? payload) {
+  if (payload == null || payload.isEmpty) return null;
+  if (!payload.startsWith('{')) return (payload, null);
+  try {
+    final decoded = jsonDecode(payload);
+    if (decoded is Map) {
+      final route = decoded['route'];
+      final taskId = decoded['task_id'];
+      if (route is String && route.isNotEmpty) {
+        return (route, taskId is String ? taskId : null);
       }
-    } catch (_) {
-      debugPrint('[FCM] payload ของการแจ้งเตือนอ่านไม่ได้');
     }
-    return;
+  } catch (_) {
+    debugPrint('[FCM] payload ของการแจ้งเตือนอ่านไม่ได้');
   }
-
-  _openFromPush(payload, null);
+  return null;
 }
 
 class FcmService {
@@ -253,6 +254,24 @@ class FcmService {
       final taskId = initialMessage.data['task_id'] ?? initialMessage.data['taskId'];
       _pendingRoute = route is String ? route : null;
       _pendingTaskId = taskId is String ? taskId : null;
+    }
+
+    // แอปถูกปิดอยู่แล้วผู้ใช้แตะ "การแจ้งเตือนที่แอปสร้างเอง" (background handler
+    // ยิง local notification) — FCM ไม่มี initial message ให้ ต้องอ่านจาก launch
+    // details ของ plugin ไม่งั้นแตะแล้วแอปเปิดเฉย ๆ ไม่พาไปหน้ารายงาน
+    if (_pendingRoute == null) {
+      final launchDetails =
+          await _localNotifications.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp ?? false) {
+        final parsed = _parseNotificationPayload(
+          launchDetails?.notificationResponse?.payload,
+        );
+        if (parsed != null) {
+          _pendingRoute = parsed.$1;
+          _pendingTaskId = parsed.$2;
+          print('[FCM] เปิดแอปจากการแตะแจ้งเตือน: ${parsed.$1}');
+        }
+      }
     }
 
     _initialized = true;
