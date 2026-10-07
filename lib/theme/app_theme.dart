@@ -1,18 +1,15 @@
-// lib/theme/app_theme.dart
 import 'package:flutter/material.dart';
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 
 class AppTheme {
-  // กำหนดสีจากธีมเว็บของคุณ
-  static const Color primary = Color(0xFF2a3d4f); // #2a3d4f
-  static const Color background = Color(0xFFf8f9fa); // #f8f9fa
-  static const Color surface = Color(0xFF000000); // #000000
+  static const Color primary = Color(0xFF2a3d4f);
+  static const Color background = Color(0xFFf8f9fa);
+  static const Color surface = Color(0xFF000000);
   static const Color cyanAccent = Color(0xFF00BCD4);
   static const Color blueAccent = Color(0xFF2196F3);
 
   static const Color splashBackground = Color(0xFF0f172a);
 
-  /// ปุ่มทุกชนิดไม่มีเงา (ทั้งปุ่ม Material ปกติและปุ่มที่กำหนดสไตล์เอง)
   static ButtonStyle _flatButtonStyle() => ButtonStyle(
         elevation: const WidgetStatePropertyAll<double>(0),
         shadowColor: const WidgetStatePropertyAll<Color>(Colors.transparent),
@@ -60,11 +57,7 @@ class AppTheme {
       useMaterial3: true,
       swapLegacyOnMaterial3: true,
       fontFamily: 'Kanit',
-      // สำหรับ Dark Theme ที่คุณใช้ในเว็บ
       scaffoldBackground: const Color(0xFF0f172a),
-      // cardColor: const Color(0x0FFFFFFF),
-      // ต้องมี CustomColors ทุกธีม ไม่งั้นจอที่อ่านค่าผ่าน
-      // Theme.of(context).extension<CustomColors>()! จะ throw ตอนวาด
       extensions: <ThemeExtension<dynamic>>{
         CustomColors(
           backgroundColor: background,
@@ -103,10 +96,7 @@ class AppTheme {
       useMaterial3: true,
       swapLegacyOnMaterial3: true,
       fontFamily: 'Kanit',
-      // ตั้งค่าสำหรับ Dark Theme แบบเว็บของคุณ
       scaffoldBackground: const Color(0xFF0f172a),
-      // cardColor: const Color(0x0FFFFFFF),
-      // Custom colors for your specific needs
       extensions: <ThemeExtension<dynamic>>{
         CustomColors(
           backgroundColor: const Color(0xFF0f172a),
@@ -121,7 +111,6 @@ class AppTheme {
   }
 }
 
-// Custom Theme Extension สำหรับสีพิเศษ
 class CustomColors extends ThemeExtension<CustomColors> {
   const CustomColors({
     required this.backgroundColor,

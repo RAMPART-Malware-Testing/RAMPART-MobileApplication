@@ -1,7 +1,3 @@
-/// ข้อมูลไฟล์ที่ผู้ใช้เลือกไว้แสดงบนหน้าจอ (ยังไม่อัปโหลด)
-///
-/// ส่วน request/response ของการอัปโหลดอยู่ใน `lib/models/analysis.dart`
-/// เพราะยิงตรงไปที่ API วิเคราะห์ของ RAMPART
 class SelectedFileInfo {
   final String name;
   final String path;

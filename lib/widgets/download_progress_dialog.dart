@@ -4,10 +4,6 @@ import 'package:flutter/material.dart';
 import '../services/report_download_service.dart';
 import 'analysis_components.dart';
 
-/// กล่องแจ้งความคืบหน้าระหว่างดาวน์โหลดรายงาน
-///
-/// เซิร์ฟเวอร์บางครั้งไม่ส่ง `Content-Length` มา [DownloadProgress.percent]
-/// จึงเป็น null — กรณีนั้นแถบจะเป็นแบบไม่รู้ขนาด แล้วแสดงจำนวนไบต์ที่มาแทน
 class DownloadProgressDialog extends StatelessWidget {
   const DownloadProgressDialog({
     super.key,
@@ -51,7 +47,6 @@ class DownloadProgressDialog extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // แถบกว้างเต็ม dialog — ค่ามีอยู่แล้วจึงไม่มี ticker ไม่กิน CPU เปล่า (ดู R2 ใน AGENTS.md)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: LinearProgressIndicator(
@@ -79,7 +74,6 @@ class DownloadProgressDialog extends StatelessWidget {
   }
 }
 
-/// กล่องแจ้งผลการดาวน์โหลด — สำเร็จหรือไม่สำเร็จ
 class DownloadResultDialog extends StatelessWidget {
   const DownloadResultDialog({
     super.key,

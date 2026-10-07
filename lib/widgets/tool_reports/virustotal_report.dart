@@ -16,7 +16,7 @@ class VirusTotalReportWidget extends StatefulWidget {
 
 class _VirusTotalReportWidgetState extends State<VirusTotalReportWidget> {
   String _query = '';
-  int _tab = 0; // 0 = Detection, 1 = Details
+  int _tab = 0;
 
   static const _maliciousColor = Color(0xFFF87171);
   static const _suspiciousColor = Color(0xFFFBBF24);

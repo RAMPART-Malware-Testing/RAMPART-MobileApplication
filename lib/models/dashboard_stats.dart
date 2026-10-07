@@ -1,19 +1,7 @@
-/// โมเดลข้อมูลหน้า Dashboard (RAMPART dashboard API)
-///
-/// โครงสร้างยึดตาม contract ที่แอปเว็บ (`RAMPART-WebApplication`) ใช้จริง ไม่ใช่
-/// schema ใน OpenAPI ของ backend ซึ่งระบุ response เป็น `"schema":{}` ว่างเปล่า
-///
-/// หน้าเว็บอ่านค่าจาก `/api/analy/v1/dashboard/summary` ผ่าน
-/// `NextResponse.json({ success: true, data: res })` แล้วห่อ `data` อีกชั้น เช่นนั้น
-/// ฝั่งมือถือที่ยิง backend ตรงจะได้ `{ success, status, message, data: {...} }`
-/// โดยเนื้อ summary อยู่ใน `data` — ตัวแยกชั้นทำให้รองรับทั้งสองแบบ
 library;
 
 import 'analysis.dart';
 
-// ---------- helper สำหรับ parse แบบทนทาน ----------
-// ซ้ำกับที่อยู่ใน analysis.dart เพราะไฟล์นั้นประกาศเป็น private (ขีดกลางนำหน้า)
-// และแต่ละไฟล์ Dart เป็นคนละ library จึง import ใช้ไม่ได้
 
 String? _str(dynamic v) {
   if (v == null) return null;
@@ -65,12 +53,6 @@ List<Map<String, dynamic>> _mapList(dynamic v) {
   return out;
 }
 
-/// แตก envelope `{success, data}` ให้เหลือ payload จริง
-///
-/// backend ไม่ได้ห่อทุก endpoint เหมือนกัน:
-/// - `summary` คืน dict ตรง ๆ ที่ระดับบนสุด
-/// - `recent-activities` คืน **list** ตรง ๆ ไม่มี envelope เลย
-/// - `reports` คืน `{data: [...]}` เหมือนหน้าเว็บคาดไว้
 Map<String, dynamic>? _unwrapData(Map<String, dynamic> json) {
   final data = _map(json['data']);
   if (data != null) return data;
@@ -78,12 +60,6 @@ Map<String, dynamic>? _unwrapData(Map<String, dynamic> json) {
   return null;
 }
 
-/// ถือว่าเป็น error เมื่อ backend บอกตรง ๆ ว่าไม่สำเร็จเท่านั้น
-///
-/// ชั้น service ใส่ `success: false` ตอน exception และ FastAPI ใส่ `detail`
-/// ตอน 401/422 ส่วน payload ที่สำเร็จจะไม่มีคีย์ `success` เลย ถ้าเอา "ต้องมี
-/// success == true" เป็นเงื่อนไข จะทำให้ทุก endpoint ที่คืน payload ตรง ๆ
-/// ถูกตีความว่าล้มเหลว
 bool _isFailure(dynamic raw) {
   if (raw is! Map) return false;
   final json = _map(raw);
@@ -92,7 +68,6 @@ bool _isFailure(dynamic raw) {
   return json.containsKey('detail') && !json.containsKey('data');
 }
 
-/// ดึง payload ที่อยู่ใน envelope หรือคืนตัวมันเองถ้าไม่มี envelope
 dynamic _payloadOf(dynamic raw) {
   if (raw is List) return raw;
   final json = _map(raw);
@@ -102,9 +77,7 @@ dynamic _payloadOf(dynamic raw) {
   return json;
 }
 
-// ---------- ตัวนับไฟล์ ----------
 
-/// จำนวนไฟล์แยกตามสถานะ ทั้งระบบ (`totalFiles`) และของผู้ใช้คนนี้ (`userFiles`)
 class FileCounts {
   final int total;
   final int success;
@@ -118,8 +91,6 @@ class FileCounts {
     this.failed = 0,
   });
 
-  /// `total` ที่ backend ส่งมาอาจไม่ตรงกับผลบวกของสามสถานะ (เช่นมีสถานะอื่น
-  /// ที่หน้าเว็บไม่ได้แสดง) ถ้าไม่มีค่านี้ค่อยคำนวณจากสามสถานะแทน
   int get resolvedTotal => total > 0 ? total : success + pending + failed;
 
   double get successRate =>
@@ -136,7 +107,6 @@ class FileCounts {
   }
 }
 
-// ---------- ประเภทมัลแวร์ยอดนิยม ----------
 
 class MalwareTypeEntry {
   final String type;
@@ -152,12 +122,6 @@ class MalwareTypeEntry {
   }
 }
 
-/// สามชุดที่ backend ส่งมาพร้อมกันในคำขอเดียว — หน้าเว็บสลับด้วยปุ่ม
-/// 'รายวัน' / 'รายเดือน' / 'ทั้งหมด' (ดู `TIME_RANGES` ใน
-/// RAMPART-WebApplication/src/app/(pages)/dashboard/page.tsx)
-///
-/// `all` ไม่ได้แปลว่า "ผลรวมของสองชุดแรก" แต่คือมัลแวร์ยอดนิยมตลอดกาล —
-/// เป็นชุดที่หน้าเว็บเลือกไว้ตั้งแต่เปิดหน้า เพราะข้อมูลรายวันมักว่าง
 class TopMalwareTypes {
   final List<MalwareTypeEntry> daily;
   final List<MalwareTypeEntry> monthly;
@@ -185,39 +149,19 @@ class TopMalwareTypes {
   };
 }
 
-// ---------- คะแนนความอันตรายตามประเภทไฟล์ ----------
 
-/// ค่าเฉลี่ยจำแนกตามประเภทไฟล์ พร้อมค่าเฉลี่ยรายเครื่องมือ
-///
-/// โครงจริงจาก `GET/POST /api/analy/v1/dashboard/summary`
-/// (`services/dashboard/dashboars_service.py`) วางคะแนนรายเครื่องมือไว้ **ซ้อนใน
-/// `tools`** ไม่ใช่คีย์แบน:
-/// ```json
-/// {"fileType":"script","label":"Script","riskScore":92.86,
-///  "tools":{"virustotal":100.0,"mobsf":null,"cape":null,"ai":null},
-///  "sampleCount":14,"scoredCount":14}
-/// ```
-/// อ่านคีย์แบนเดิม (`virustotalScore`, `rampart_ai_score`, …) ไว้เป็น fallback
-/// เผื่อ payload จากที่อื่น — แต่ถ้าอ่านแต่แบน ชิปคะแนนรายเครื่องมือจะไม่ขึ้นเลย
 class RiskScoreEntry {
   final String fileType;
 
-  /// ชื่อหมวดที่คนอ่านรู้เรื่อง ส่งมาจาก backend (`CATEGORIES` ของ
-  /// `utils/file_type_detect.py`) เช่น 'windows-exe' → 'Windows Executable'
   final String label;
 
-  /// คะแนนรวม 0-100
   final double riskScore;
   final double? virustotalScore;
   final double? mobsfScore;
   final double? capeScore;
 
-  /// คะแนนจากโมเดล ML — backend ส่งมาเป็น `{malware_probability: 0..1}`
-  /// หรือเป็นตัวเลข 0-100 ตรง ๆ ก็ได้
   final double? aiScore;
 
-  /// ไฟล์ทั้งหมดในหมวดนี้ และจำนวนที่มีคะแนนจริง — หน้าเว็บโชว์เป็น 'N/M ไฟล์'
-  /// หมวดที่มีตัวอย่างน้อยกว่า 3 ไฟล์ที่ให้คะแนนจะไม่ถูกส่งมาเลย
   final int sampleCount;
   final int scoredCount;
 
@@ -233,11 +177,9 @@ class RiskScoreEntry {
     this.scoredCount = 0,
   });
 
-  /// ชื่อที่ใช้แสดงผล — ป้ายจาก backend ก่อน ถ้าไม่มีค่อยใช้รหัสหมวดดิบ
   String get displayName => label.isNotEmpty ? label : fileType;
 
   factory RiskScoreEntry.fromJson(Map<String, dynamic> json) {
-    // ค่าเฉลี่ยรายเครื่องมืออยู่ใน `tools` (ค่าที่ไม่มีคือ null ไม่ใช่ 0)
     final tools = _map(json['tools']) ?? const {};
     return RiskScoreEntry(
       fileType: _str(json['fileType']) ?? _str(json['file_type']) ?? '',
@@ -259,7 +201,6 @@ class RiskScoreEntry {
     );
   }
 
-  /// เครื่องมือที่มีคะแนนจริง เรียงตามลำดับที่หน้าเว็บแสดง
   List<({String key, String label, String title, double value})>
       get toolScores => [
     if (virustotalScore != null)
@@ -273,13 +214,6 @@ class RiskScoreEntry {
   ];
 }
 
-/// backend อาจส่ง `rampart_ai_score` มาเป็น object `{malware_probability: 0..1}`
-/// หรือเป็นตัวเลขตรง ๆ — ถ้าเป็น object ต้องคูณ 100 ให้เป็นสเกล 0-100 เหมือนกัน
-///
-/// ถ้าเป็นเลขล้วน ให้ถือว่าเป็นสเกล 0-100 อยู่แล้ว ไม่คูณซ้ำ — เป็นพฤติกรรมเดียวกับ
-/// `aiChipValue()` ใน useDashboard.ts ที่หน้าเว็บใช้จริง
-/// (ส่วน [RampartAiScore] ใน analysis.dart ตีความเลขล้วนเป็นสัดส่วน ซึ่งต่างกัน
-///  เว้นแต่กรณีนี้ backend ส่ง object ซึ่งทั้งสองฝั่งตีความตรงกัน)
 double? _aiScore(dynamic raw) {
   if (raw == null) return null;
   final map = _map(raw);
@@ -298,7 +232,6 @@ double _clampScore(double? v) {
   return v.clamp(0, 100).toDouble();
 }
 
-// ---------- สรุปทั้งหมด ----------
 
 class DashboardSummary {
   final FileCounts totalFiles;
@@ -329,8 +262,6 @@ class DashboardSummary {
     );
   }
 
-  /// คืน null เมื่อ response เป็น error — payload ที่ backend คืนตรง ๆ
-  /// (ไม่มี envelope) ต้องผ่าน ไม่เช่นนั้นหน้าจะว่างทั้งที่เซิร์ฟเวอร์ทำงานปกติ
   static DashboardSummary? tryParse(dynamic raw) {
     if (_isFailure(raw)) return null;
     final json = _map(raw);
@@ -341,10 +272,7 @@ class DashboardSummary {
   }
 }
 
-// ---------- กิจกรรมล่าสุด ----------
 
-/// สถานะที่ backend ใช้ — ระหว่างวิเคราะห์ `Analysis.status` วิ่ง
-/// `dispatching → queued → processing` ก่อนจบด้วย `success|failed`
 enum ActivityStatus { success, processing, pending, failed, unknown }
 
 class RecentActivity {
@@ -354,11 +282,6 @@ class RecentActivity {
   final String fileType;
   final ActivityStatus status;
 
-  /// เวลาที่ parse เป็น `DateTime` แล้ว ใช้แสดงผลในเขตเวลาของเครื่องผู้ใช้
-  ///
-  /// backend ส่งมาเป็นสตริง `"%Y-%m-%d %H:%M:%S"` ที่ไม่มีโซนเวลา แต่ค่าในฐานข้อมูล
-  /// เป็น UTC ถ้าเอาไปแสดงตรง ๆ เวลาจะเพี้ยนไปหลายชั่วโมง
-  /// ต่างจากรายงานสาธารณะที่ส่ง ISO 8601 มา — ทั้งสองต้องแสดงตรงกัน
   final DateTime? createdAt;
 
   const RecentActivity({
@@ -383,7 +306,6 @@ class RecentActivity {
   }
 }
 
-/// backend ส่งเวลามาโดยไม่มีโซน จึงต้องถือว่าเป็น UTC
 DateTime? _parseActivityTime(String raw) {
   if (raw.isEmpty) return null;
   final parsed = DateTime.tryParse(raw);
@@ -395,7 +317,6 @@ ActivityStatus _activityStatus(String? raw) {
   switch (raw?.trim().toLowerCase()) {
     case 'success':
       return ActivityStatus.success;
-    // ระหว่างวิเคราะห์ backend ส่ง processing — ไม่ใช่ unknown
     case 'processing':
       return ActivityStatus.processing;
     case 'pending':
@@ -409,23 +330,14 @@ ActivityStatus _activityStatus(String? raw) {
   }
 }
 
-// ---------- ผลรวมที่หน้าจอใช้ ----------
 
-/// หนึ่งหน้าของรายงานสาธารณะ (ปุ่ม "ดูเพิ่มเติม" ใช้ชั้นนี้ต่อทีละหน้า)
-///
-/// endpoint `dashboard/reports` คืน `{success, data, pagination:{has_next, total}}`
-/// — ถ้า response ไม่มี `pagination` (payload เก่า/แคชเก่า) ให้เดาจากจำนวนชิ้นแทน:
-/// ได้ครบตาม limit ถือว่ายังมีหน้าต่อไป
 class PublicReportsPage {
   final List<AnalysisHistoryItem> items;
 
-  /// ยังมีหน้าถัดไปให้กด "ดูเพิ่มเติม" อีกหรือไม่
   final bool hasMore;
 
-  /// จำนวนรายงานสาธารณะทั้งหมด (0 เมื่อเซิร์ฟเวอร์ไม่บอก)
   final int total;
 
-  /// ข้อความ error — สตริงว่างเมื่อโหลดสำเร็จ
   final String error;
 
   const PublicReportsPage({
@@ -467,16 +379,13 @@ class PublicReportsPage {
   }
 }
 
-/// ข้อมูลทั้งชุดที่หน้า dashboard ต้องใช้ รวมสถานะ error ของแต่ละ endpoint
 class DashboardBundle {
   final DashboardSummary? summary;
   final List<RecentActivity> recentActivities;
   final List<AnalysisHistoryItem> publicReports;
 
-  /// ยังมีรายงานสาธารณะหน้าถัดไป (จาก `pagination.has_next` ของหน้าแรก)
   final bool publicReportsHasMore;
 
-  /// จำนวนรายงานสาธารณะทั้งหมด ใช้โชว์ในหัวข้อ "ไฟล์สาธารณะ"
   final int publicReportsTotal;
 
   final String error;
@@ -507,8 +416,6 @@ class DashboardBundle {
   }) {
     final parsedSummary = DashboardSummary.tryParse(summary);
 
-    // recent-activities คืน list ตรง ๆ (ไม่มี envelope) จึงต้องอ่านผ่าน
-    // _payloadOf เหมือนกัน ไม่งั้น list จะถูกทิ้งและกลายเป็นหน้าว่าง
     final activities = <RecentActivity>[];
     if (!_isFailure(recentActivities)) {
       final payload = _payloadOf(recentActivities);

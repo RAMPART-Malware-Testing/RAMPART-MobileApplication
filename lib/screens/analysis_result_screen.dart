@@ -51,8 +51,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
   bool _privacySaving = false;
   late bool _isPrivate = true;
 
-  /// โหลดรายงานอัตโนมัติเมื่อยังไม่พร้อม — เปิดจากแจ้งเตือนแล้ว backend ยังไม่ทัน
-  /// เขียนเสร็จ/ยังไม่พร้อมอ่าน จะได้ไม่ต้องให้ผู้ใช้กดเอง
   static const int _maxAutoRetries = 10;
   static const Duration _autoRetryDelay = Duration(seconds: 3);
   Timer? _autoRetryTimer;
@@ -71,7 +69,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     super.dispose();
   }
 
-  /// ตั้งเวลาลองโหลดใหม่เอง (จำกัดจำนวนครั้ง) แล้วเลิกเงียบ ๆ ถ้าเกิน
   void _scheduleAutoRetry() {
     if (_autoRetries >= _maxAutoRetries) return;
     _autoRetries++;
@@ -112,7 +109,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             ? status.message
             : 'ไม่พบรายงานนี้';
       });
-      // ยังไม่พร้อม → ลองดึงใหม่เองสักระยะ ก่อนปล่อยให้ผู้ใช้กดเอง
       _scheduleAutoRetry();
       return;
     }
@@ -152,7 +148,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     final result = await _service.getToolReport(taskId: _taskId, tool: tool);
     if (!mounted) return;
 
-    // ดึง md5 และ fileName จาก raw report ตามเครื่องมือ
     String? md5;
     String? fileName;
     if (result.success && result.report != null) {

@@ -11,7 +11,6 @@ import 'package:rampart/services/offline_cache.dart';
 import 'package:rampart/services/session_guard.dart';
 import 'package:rampart/services/tab_cache.dart';
 
-/// บริการจัดการโปรไฟล์ผู้ใช้และประวัติการใช้งาน
 class ProfileService {
   static final ProfileService _instance = ProfileService._internal();
   factory ProfileService() => _instance;
@@ -61,19 +60,12 @@ class ProfileService {
     return fallback;
   }
 
-  /// คำขอไปไม่ถึงเซิร์ฟเวอร์เลย — บอก NetworkMonitorService ให้แถบออฟไลน์ขึ้นทันที
   void _reportUnreachable(Object error) {
     if (NetworkMonitorService.isUnreachable(error)) {
       NetworkMonitorService().reportUnreachable();
     }
   }
 
-  /// ดึงข้อมูลโปรไฟล์ผู้ใช้
-  ///
-  /// [force] = true เมื่อต้องการข้อมูลสดจริง ๆ (ข้ามแคชในหน่วยความจำ 4 วินาที)
-  ///
-  /// ตอนออฟไลน์จะคืนโปรไฟล์ที่บันทึกไว้ในดิสก์ เพื่อให้หน้า Settings ยังแสดงข้อมูล
-  /// ของผู้ใช้ได้ — แบนเนอร์ด้านบนหน้าจอเป็นตัวบอกว่าข้อมูลนั้นเป็นของเก่า
   Future<ProfileResult> getProfile({bool force = false}) async {
     final token = await _accessToken();
     if (token == null) {
@@ -136,7 +128,6 @@ class ProfileService {
     }
   }
 
-  /// โปรไฟล์ที่เคยดึงสำเร็จและบันทึกไว้ในดิสก์ — คืน null ถ้าไม่มีหรืออ่านไม่ได้
   Future<ProfileResult?> _cachedProfile(String scope, String cacheKey) async {
     final cached = await OfflineCache.instance.get(scope, cacheKey);
     if (cached == null || cached.payload is! Map) return null;
@@ -149,7 +140,6 @@ class ProfileService {
     return result;
   }
 
-  /// แก้ไขชื่อผู้ใช้
   Future<ProfileResult> updateUsername(String username) async {
     final trimmed = username.trim();
     final regex = RegExp(r'^[a-zA-Z0-9_.\-\u0E00-\u0E7F]{3,50}$');
@@ -196,7 +186,6 @@ class ProfileService {
     }
   }
 
-  /// อัปโหลดรูปโปรไฟล์
   Future<ProfileResult> uploadAvatar(File file) async {
     try {
       if (!await file.exists()) {
@@ -259,7 +248,6 @@ class ProfileService {
     }
   }
 
-  /// ประวัติการเข้าสู่ระบบ
   Future<LoginHistoryResult> loginHistory() async {
     final token = await _accessToken();
     if (token == null) {
@@ -291,7 +279,6 @@ class ProfileService {
     }
   }
 
-  /// ประวัติการดาวน์โหลด
   Future<DownloadHistoryResult> downloadHistory() async {
     final token = await _accessToken();
     if (token == null) {
@@ -323,7 +310,6 @@ class ProfileService {
     }
   }
 
-  /// บันทึกการดาวน์โหลดรายงาน (เรียกโดย agent อื่น — ห้าม throw และห้ามแสดง error ให้ผู้ใช้)
   Future<bool> registerDownload({
     String? fileName,
     String? tool,
@@ -353,7 +339,6 @@ class ProfileService {
     }
   }
 
-  /// แปลง avatar_url จาก backend (รองรับทั้ง absolute และ relative)
   static String? resolveAvatarUrl(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;

@@ -38,8 +38,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  /// ผู้ใช้เพิ่งกดแท็บ Settings — ProfileService จะยิงเซิร์ฟเวอร์ใหม่เฉพาะตอนที่แคช
-  /// ครบ 4 วินาทีแล้วเท่านั้น และถ้าไม่มีเน็ตจะคืนโปรไฟล์ที่บันทึกไว้ในดิสก์
   void _onTabSelected() {
     if (TabRefreshBus.currentIndex != TabRefreshBus.settingsTab) return;
     _loadProfile();
@@ -54,7 +52,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadProfile({bool force = false}) async {
-    // แสดง cache ทันทีถ้ามี แล้วค่อยอัปเดตจาก API
     final cached = ProfileService.instance.cached;
     if (cached != null) {
       setState(() {
@@ -74,14 +71,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-/// สวิตช์นี้ต้องมีผลสองชั้น
-///
-/// ค่าในเครื่องคุมแบนเนอร์ตอนแอปอยู่หน้าจอ (อ่านโดย [FcmService]) แต่ตอนแอปอยู่
-/// เบื้องหลังระบบปฏิบัติการเป็นคนวาดแจ้งเตือนเองจาก `notification` block โค้ด Dart
-/// ไม่มีโอกาสได้ทำงาน ค่าในเครื่องจึงคุมไม่ได้
-///
-/// ชั้นที่ได้ผลจริงคือฝั่งเซิร์ฟเวอร์: ปิดสวิตช์แล้วถอนอุปกรณ์ออก ไม่มี token ก็
-/// ไม่มีการส่งเลย เปิดกลับแล้วลงทะเบียนใหม่
 Future<void> _toggleNotifications(bool value) async {
     setState(() => _notificationsEnabled = value);
     await _storage.write(key: 'notif_enabled', value: value.toString());
@@ -128,7 +117,6 @@ Future<void> _toggleNotifications(bool value) async {
 
   String _formatDate(DateTime? date) {
     if (date == null) return '';
-    // created_at มาจากเซิร์ฟเวอร์เป็น UTC ต้องแปลงเป็นเวลาท้องถิ่นก่อนแสดง
     final formatter = DateFormat('d MMMM yyyy', 'th');
     return formatter.format(date.toLocal());
   }

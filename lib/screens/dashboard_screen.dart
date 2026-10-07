@@ -10,9 +10,6 @@ import '../services/tab_auto_refresh.dart';
 import '../services/tab_refresh_bus.dart';
 import '../theme/app_theme.dart';
 
-/// หน้า Dashboard — ดึงสถิติจาก `/api/analy/v1/dashboard/*`
-///
-/// โครงสร้างข้อมูลยึดตามที่หน้าเว็บ (`RAMPART-WebApplication`) ใช้จริง
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({
     Key? key,
@@ -20,10 +17,8 @@ class DashboardScreen extends StatefulWidget {
     this.loadFresh = defaultLoadFresh,
   }) : super(key: key);
 
-  /// จุดเชื่อมสำหรับเทสต์ — ค่าเริ่มต้นยิงเซิร์ฟเวอร์จริง (ใช้แคช 4 วินาทีได้)
   final Future<DashboardBundle> Function() load;
 
-  /// เหมือน [load] แต่ข้ามแคช — ใช้เมื่อผู้ใช้สั่งเอง (ดึงลงเพื่อรีเฟรช / ลองอีกครั้ง)
   final Future<DashboardBundle> Function() loadFresh;
 
   static Future<DashboardBundle> defaultLoad() => dashboardService.loadDashboard();
@@ -41,32 +36,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _error = '';
   DashboardBundle? _bundle;
 
-  /// คำขอกำลังวิ่งอยู่ — กันตัวจับเวลากับการกดแท็บยิงซ้อนกัน
   bool _fetching = false;
 
-  /// ผู้ใช้สั่งดึงเอง (ดึงลงเพื่อรีเฟรช / ปุ่มลองอีกครั้ง) ระหว่างที่คำขอเดิมยังวิ่ง
-  /// อยู่ — จำไว้ยิงต่อทันทีที่คำขอเดิมเสร็จ คำสั่งผู้ใช้ต้องไม่หายเงียบ ๆ
   bool _pendingForcedLoad = false;
 
-  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
-  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
   late final TabAutoRefresh _autoRefresh;
 
-  // ---------- รายงานสาธารณะ ----------
-  //
-  // dashboard โชว์แค่ 5 อันดับแรก ส่วนที่เหลือไปดูต่อที่แท็บ "Public"
-  // (ปุ่ม "ดูทั้งหมด" สลับแท็บให้) — เหมือนกิจกรรมล่าสุดที่พาไปแท็บ Reports
   List<AnalysisHistoryItem> _publicReports = const [];
   int _publicTotal = 0;
 
-  /// 'daily' / 'monthly' / 'all' — สามชุดนี้มาพร้อมกันใน response เดียวกัน
-  /// การสลับจึงเป็นแค่ setState ไม่ต้องยิงซ้ำ
-  ///
-  /// เริ่มที่ 'all' เหมือนหน้าเว็บ: ชุดรายวันว่างเกือบตลอด (ไม่มีสแกนใหม่วันนี้)
-  /// ถ้าเริ่มที่ daily ผู้ใช้จะเห็น "ไม่มีข้อมูลในขณะนี้" ทั้งที่ระบบมีข้อมูลครบ
   String _selectedRange = 'all';
 
-  // ใช้สีจาก Theme
   Color get _backgroundColor => Theme.of(context).scaffoldBackgroundColor;
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _textColor => Theme.of(context).colorScheme.onSurface;
@@ -82,7 +62,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   static String _formatNumber(int number) => _numberFormat.format(number);
 
-  /// ขนาดไฟล์เป็น KB/MB/GB — โครงสร้างเดียวกับ fmtSize ในหน้าเว็บ
   static String _formatSize(int? bytes) {
     if (bytes == null || bytes <= 0) return '';
     const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -104,7 +83,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onRefresh: _refreshFromTimer,
       isVisible: _isRouteVisible,
     );
-    // ยิงหลังเฟรมแรกเสร็จ เพื่อไม่ให้รอเครือข่ายก่อนหน้าจอแรกวาด (ดู R1 ใน AGENTS.md)
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDashboardData());
   }
 
@@ -115,27 +93,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
-  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
   bool _isRouteVisible() =>
       mounted && (ModalRoute.of(context)?.isCurrent ?? true);
 
-  /// ผู้ใช้เพิ่งกดแท็บ — เรียกเฉพาะตอนที่เป็นแท็บนี้ แล้วปล่อยให้ [DashboardService]
-  /// ตัดสินใจอีกชั้นว่าจะยิงเซิร์ฟเวอร์หรือคืนแคชเดิม (ยังไม่ครบ 4 วินาที)
   void _onTabSelected() {
     if (TabRefreshBus.currentIndex != TabRefreshBus.dashboardTab) return;
     _loadDashboardData();
   }
 
-  /// ครบรอบจากตัวจับเวลา — เงียบเหมือนการกดแท็บ (ไม่ขึ้นสปินเนอร์เต็มจอ
-  /// เพราะข้อมูลชุดเดิมยังแสดงอยู่)
   void _refreshFromTimer() => _loadDashboardData();
 
-  /// [force] = ผู้ใช้สั่งเอง ข้ามแคชในหน่วยความจำ
   Future<void> _loadDashboardData({bool force = false}) async {
     if (_fetching) {
-      // ตัวจับเวลายิงทับคำขอเดิมปล่อยผ่านได้ (รอบหน้ารออยู่อีก 1 นาที) แต่คำสั่ง
-      // ของผู้ใช้ต้องไม่หาย
       if (force) _pendingForcedLoad = true;
       return;
     }
@@ -156,8 +125,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _bundle = bundle;
         _error = bundle.error;
 
-        // รีเฟรชทุกครั้งเริ่มนับหน้าใหม่ที่ 1 — รายการเดิมถูกแทนที่ด้วยหน้าแรก
-        // ล่าสุดจากเซิร์ฟเวอร์
         _publicReports = bundle.publicReports;
         _publicTotal = bundle.publicReportsTotal;
       });
@@ -337,7 +304,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ---------- การ์ดสรุป 4 ใบ ----------
 
   Widget _buildStatGrid(DashboardSummary summary) {
     return Column(
@@ -350,8 +316,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: 'ไฟล์ทั้งหมด',
                   value: _formatNumber(summary.totalFiles.resolvedTotal),
                   color: _cyanColor,
-                  // บรรทัดรองแบบเดียวกับ StatCard ของหน้าเว็บ — ตัวเลขไฟล์ที่
-                  // สำเร็จของทั้งระบบไม่ได้แสดงที่อื่นเลย
                   subtitle:
                       'สำเร็จ ${_formatNumber(summary.totalFiles.success)} รายการ',
                 ),
@@ -399,7 +363,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// แถบสรุปสถานะไฟล์ของผู้ใช้ (สำเร็จ / รอวิเคราะห์ / ไม่สำเร็จ)
   Widget _buildStatusBreakdown(DashboardSummary summary) {
     final files = summary.userFiles;
     final total = files.resolvedTotal;
@@ -494,7 +457,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ---------- รายงานสาธารณะ ----------
 
   Widget _buildPublicReportsSection() {
     final reports = _publicReports;
@@ -521,8 +483,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               label: 'ดูทั้งหมด',
               icon: Icons.arrow_forward,
               isLoading: false,
-              // สลับไปแท็บ Public แทนการ push หน้าซ้อนทับ — รายการเต็มจะได้มี
-              // ตัวเดียวในแอป (จำสถานะ/ตัวกรองไว้) เหมือนปุ่มของกิจกรรมล่าสุด
               onTap: () => TabRefreshBus.select(TabRefreshBus.publicTab),
             ),
           ],
@@ -587,7 +547,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    // ผู้อัปโหลดเป็นบรรทัดของตัวเอง เหมือนการ์ดในหน้าเว็บ
                     if (report.uploadedByUsername != null &&
                         report.uploadedByUsername!.isNotEmpty) ...[
                       const SizedBox(height: 3),
@@ -621,8 +580,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ? const []
                 : [
                     const SizedBox(height: 8),
-                    // Wrap ไม่ใช่ Row — บนจอแคบชิปครบทุกเครื่องมือต้องตัดบรรทัดได้
-                    // ไม่เช่นนั้นแถวจะล้นการ์ด (RenderFlex overflow)
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
@@ -635,7 +592,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// บรรทัดรอง: ขนาดไฟล์ · เวลา (ผู้อัปโหลดย้ายไปบรรทัดของตัวเองพร้อม avatar)
   String _subtitleFor(AnalysisHistoryItem report) {
     final parts = <String>[];
     final size = _formatSize(report.fileSize);
@@ -647,12 +603,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return parts.isEmpty ? '-' : parts.join(' • ');
   }
 
-  /// ผู้อัปโหลด: วงกลมตัวอักษรแรก + ชื่อ — แบบเดียวกับ avatar ในการ์ดของหน้าเว็บ
-  ///
-  /// หน้าเว็บยิงรูปจริงจาก `uploaded_by.avatar_url` แต่ฝั่งมือถือใช้ตัวอักษรแทน:
-  /// รูปต้องโหลดผ่านเครือข่ายทุกครั้งที่แคชหลุด และบนข้อมูลจริง endpoint รูป
-  /// ตอบ 404 (ไฟล์ .jpg ที่ฐานข้อมูลชี้ไว้ไม่มีอยู่ในโฟลเดอร์ avatars/) —
-  /// ตัวอักษรคมกว่า เร็วกว่า และไม่มีทางขึ้นเป็นรูปแตก
   Widget _buildUploaderLine(String username) {
     final trimmed = username.trim();
     final initial = trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
@@ -693,19 +643,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// เวลาของกิจกรรมล่าสุด ใช้รูปแบบเดียวกับรายงานสาธารณะ
-  ///
-  /// ถ้า parse ไม่ได้ให้แสดงสตริงดิบที่ backend ส่งมา — ข้อมูลผิดรูปแบบ
-  /// ไม่ควรทำให้ทั้งแถวหาย
   String _activityTime(RecentActivity activity) {
     final created = activity.createdAt;
     if (created != null) return _dateFormat.format(created.toLocal());
     return activity.timestamp;
   }
 
-  /// ชิปคะแนนรายเครื่องมือ — แสดงเฉพาะเครื่องมือที่รายงานนั้นมีคะแนนจริง
-  ///
-  /// เว้นระยะด้วย `Wrap(spacing:)` ของผู้เรียก วิดเจ็ตที่คืนจึงไม่มี padding ซ้ายต่อชิป
   List<Widget> _toolChipsFor(AnalysisHistoryItem report) {
     final aiScore = report.rampartAiScore?.malwareProbability;
     final chips = <({String label, double value})>[
@@ -740,11 +683,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
-  // ---------- กิจกรรมล่าสุด ----------
 
   Widget _buildRecentActivitiesSection() {
     final all = _bundle?.recentActivities ?? const <RecentActivity>[];
-    // backend คืนมาได้ถึง 10 รายการ แต่ dashboard โชว์แค่ 5 อันดับแรก
     final activities = all.take(DashboardService.recentActivityLimit).toList();
 
     return _buildSection(
@@ -762,8 +703,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
           if (activities.isNotEmpty) ...[
             const SizedBox(height: 12),
-            // backend ให้แค่ 10 กิจกรรมล่าสุดตายตัว (endpoint ไม่รับ page/limit)
-            // ประวัติฉบับเต็มที่เลื่อนโหลดเพิ่มได้อยู่ที่แท็บ Reports จึงพาไปที่นั่น
             _buildViewMoreButton(
               key: const Key('activities-view-more'),
               label: 'ดูเพิ่มเติม',
@@ -843,10 +782,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ---------- คะแนนความอันตรายตามประเภทไฟล์ ----------
 
   Widget _buildRiskScoresSection(DashboardSummary summary) {
-    // เอาแค่ 10 ประเภทที่คะแนนสูงสุด (backend เรียง desc แล้ว, ปกติส่งมาไม่เกิน 5)
     final entries = summary.riskScores.take(10).toList();
     final average = _averageRisk(entries);
 
@@ -870,7 +807,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// ค่าเฉลี่ยถ่วงน้ำหนักตามจำนวนไฟล์ของแต่ละประเภท
   double _averageRisk(List<RiskScoreEntry> entries) {
     if (entries.isEmpty) return 0;
     var total = 0.0;
@@ -966,9 +902,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // ชื่อหมวดจาก backend ('Windows Executable') ไม่ใช่รหัสดิบ
-              // ('windows-exe') พร้อมจำนวนตัวอย่างที่รองรับค่าเฉลี่ยนั้น
-              // ใช้ Text.rich เพื่อให้ทั้งบรรทัดตัดด้วย ellipsis เมื่อจอแคบ
               Expanded(
                 child: Text.rich(
                   TextSpan(
@@ -1023,7 +956,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 for (final tool in entry.toolScores)
                   Tooltip(
-                    // ชื่อเต็มของเครื่องมือ + บอกว่าเป็นค่าเฉลี่ย (หน้าเว็บใส่ title ไว้)
                     message:
                         '${tool.title} (ค่าเฉลี่ย): ${tool.value.round()}/100',
                     child: Container(
@@ -1056,7 +988,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ---------- TOP 10 มัลแวร์ ----------
 
   Widget _buildTopMalwareSection(DashboardSummary summary) {
     final list = summary.topMalwareTypes.forRange(_selectedRange);
@@ -1066,8 +997,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       subtitle: '10 อันดับมัลแวร์ที่พบมากที่สุด',
       icon: Icons.bug_report,
       iconColor: Colors.red,
-      // ตัวเลือกช่วงเวลาเต็มความกว้าง อยู่ใต้หัวข้อเสมอ — ต้องกดสลับได้แม้ชุด
-      // ที่กำลังดูอยู่จะว่าง (เช่น รายวันว่างแต่ทั้งหมดมีข้อมูล)
       belowHeader: _buildPeriodSelector(),
       isEmpty: list.isEmpty,
       emptyMessage: _emptyMalwareMessage(),
@@ -1083,8 +1012,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// ข้อความว่างให้ตรงกับช่วงเวลาที่เลือก (แบบเดียวกับ TIME_RANGE_EMPTY_TEXT
-  /// ของหน้าเว็บ) — "ไม่มีข้อมูลในขณะนี้" ทำให้แยกไม่ออกว่าไม่มีเลยหรือไม่มีวันนี้
   String _emptyMalwareMessage() => switch (_selectedRange) {
     'daily' => 'ไม่พบมัลแวร์จากการสแกนในวันนี้',
     'monthly' => 'ไม่พบมัลแวร์จากการสแกนในเดือนนี้',
@@ -1097,10 +1024,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _ => 'ทั้งหมด',
   };
 
-  /// ช่วงที่เลือกว่าง แต่ช่วงอื่นมีข้อมูล — บอกทางออกให้ผู้ใช้กดต่อได้เลย
-  ///
-  /// หน้าเว็บทำแบบเดียวกัน ('ดูผลรายเดือน (10 ประเภท)') เพราะข้อมูลรายวันว่าง
-  /// เกือบตลอด ถ้าปล่อยให้เห็นแค่คำว่าไม่พบข้อมูล ผู้ใช้จะนึกว่าระบบไม่มีข้อมูลเลย
   Widget _buildMalwareEmptyHint(DashboardSummary summary) {
     final others = ['daily', 'monthly', 'all']
         .where(
@@ -1150,14 +1073,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
-      // แบ่งความกว้างเท่ากันทั้งสามปุ่ม — ปุ่มที่สามเคยอยู่เป็น `trailing` ของ
-      // หัวข้อ แล้วล้นจอ 360dp พร้อมตัดข้อความหัวข้อจนอ่านไม่ได้
       child: Row(
         children: [
           Expanded(child: _buildPeriodButton('รายวัน', 'daily')),
           Expanded(child: _buildPeriodButton('รายเดือน', 'monthly')),
-          // ชุด 'all' มากับ response เดียวกัน — หน้าเว็บมีสามปุ่มนี้และเริ่มที่
-          // 'ทั้งหมด' เพราะข้อมูลรายวันมักว่าง
           Expanded(child: _buildPeriodButton('ทั้งหมด', 'all')),
         ],
       ),
@@ -1167,7 +1086,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPeriodButton(String label, String range) {
     final isSelected = _selectedRange == range;
     return InkWell(
-      // สองชุดข้อมูลมาพร้อมกันใน response เดียวกัน จึงไม่ต้องยิงซ้ำ
       onTap: () => setState(() => _selectedRange = range),
       borderRadius: BorderRadius.circular(8),
       child: Container(
@@ -1213,7 +1131,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final maxCount = all.fold<int>(0, (m, e) => e.count > m ? e.count : m);
     final ratio = maxCount == 0 ? 0.0 : entry.count / maxCount;
     final color = _malwareColors[index % _malwareColors.length];
-    // ที่ 1 ทอง + ป้าย 'พบมากที่สุด', 2 เงิน, 3 ทองแดง — สีเดียวกับที่หน้าเว็บใช้
     final rank = _rankStyle(index);
 
     return Container(
@@ -1251,8 +1168,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Wrap (ไม่ใช่ Row) เหมือน flex-wrap ของหน้าเว็บ — ชื่อมัลแวร์ยาว ๆ
-                // กับป้าย 'พบมากที่สุด' ต้องตัดบรรทัดได้ ไม่ล้นการ์ดบนจอ 360dp
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -1296,7 +1211,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   static const Color _rankGold = Color(0xFFF59E0B);
 
-  /// ป้ายอันดับตามลำดับความเด่น (ที่มาของสี: badgeClass ในหน้าเว็บ)
   static ({Color background, Color foreground, bool top}) _rankStyle(int index) {
     return switch (index) {
       0 => (
@@ -1322,7 +1236,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-  /// ป้าย 'พบมากที่สุด' ของอันดับ 1 (หน้าเว็บวางไว้ข้างชื่อมัลแวร์)
   Widget _buildTopBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -1342,11 +1255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ---------- ส่วนประกอบร่วม ----------
 
-  /// ปุ่ม "ดูเพิ่มเติม" เต็มความกว้างของการ์ด
-  ///
-  /// [isLoading] = กำลังดึงหน้าถัดไป ปุ่มจะถูกปิดและโชว์ตัวหมุนแทนลูกศร
   Widget _buildViewMoreButton({
     required VoidCallback onTap,
     required bool isLoading,
@@ -1429,7 +1338,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        // ตัวควบคุมที่ต้องกดได้ตลอด แม้ส่วนเนื้อหาจะว่าง (เช่น ตัวเลือกช่วงเวลา)
         if (belowHeader != null) ...[belowHeader, const SizedBox(height: 12)],
         if (isEmpty)
           emptyWidget ?? _buildEmptyState(icon, emptyMessage)
@@ -1528,9 +1436,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// ป้ายสถานะของการ์ดรายงานสาธารณะ — ใช้ข้อความไทยชุดเดียวกับแท็บ Reports
-  /// และ Public Reports (เดิมโชว์ค่าดิบของ backend ว่า 'success' ปนอยู่ทั้งที่
-  /// หน้าจอเดียวกันเขียน 'สำเร็จ' — อ่านแล้วเหมือนเป็นข้อมูลคนละชุด)
   Widget _buildStatusBadge(String status) {
     final (color, label) = switch (status.toLowerCase()) {
       'success' => (Colors.green, 'สำเร็จ'),
@@ -1572,7 +1477,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  /// เกณฑ์ระดับความอันตราย — ค่าเดียวกับที่หน้าเว็บใช้
   static String _tierLabel(double score) {
     if (score >= 80) return 'อันตรายร้ายแรง';
     if (score >= 60) return 'อันตราย';

@@ -9,8 +9,6 @@ class ReportFilterOption {
   final String label;
 }
 
-/// ตัวเลือกตัวกรองของหน้ารายงาน — ใช้ร่วมกันทั้งแท็บ Reports (รายงานของฉัน)
-/// และหน้า Public Reports ค่าและลำดับต้องเหมือนกันทั้งสองหน้า
 const List<ReportFilterOption> kStatusFilters = [
   ReportFilterOption('', 'ทั้งหมด'),
   ReportFilterOption('success', 'สำเร็จ'),
@@ -36,7 +34,6 @@ const List<ReportFilterOption> kSortOptions = [
   ReportFilterOption('score', 'ความเสี่ยง'),
 ];
 
-/// ช่องค้นหา — คำค้นถูก debounce ที่หน้าจอเรียกใช้ ไม่ใช่ที่นี่
 class ReportSearchField extends StatelessWidget {
   const ReportSearchField({
     super.key,
@@ -98,11 +95,6 @@ class ReportSearchField extends StatelessWidget {
   }
 }
 
-/// แถบตัวกรองสามตัว (สถานะ / ประเภทไฟล์ / เรียงตาม) แบบชิปที่เปิดเมนูได้
-///
-/// เดิมกระจายเป็นชิป 17 ปุ่ม กินพื้นที่เกือบครึ่งจอทั้งที่ค่าส่วนใหญ่ยังเป็นค่าเริ่มต้น
-/// ตอนนี้แต่ละปุ่มบอกค่าที่ใช้อยู่ในตัว แล้วเปิดเมนูให้เลือก ส่วนปุ่มที่ถูก
-/// เปลี่ยนจะติดสีให้เห็นว่ากรองอยู่
 class ReportFilterBar extends StatelessWidget {
   const ReportFilterBar({
     super.key,
@@ -178,7 +170,6 @@ class ReportFilterBar extends StatelessWidget {
     );
   }
 
-  /// ปุ่มเรียงลำดับ — แตะรายการที่เลือกอยู่อีกครั้งเพื่อสลับทิศทาง
   Widget _buildSortPill() {
     final current = kSortOptions.firstWhere(
       (option) => option.value == sortField,
@@ -223,8 +214,6 @@ class ReportFilterBar extends StatelessWidget {
             color: selected ? AnalysisColors.cyan : AnalysisColors.textMuted,
           ),
           const SizedBox(width: 10),
-          // ข้อความเมนูบางรายการยาวมาก (เช่น "ความเสี่ยง ↓ ใหม่สุดก่อน")
-          // บนจอแคบจะล้นเมนูออกไปนอกจอ — ยอมให้ตัดท้ายแทนการล้น
           Expanded(
             child: Text(
               suffix == null ? option.label : '${option.label} · $suffix',

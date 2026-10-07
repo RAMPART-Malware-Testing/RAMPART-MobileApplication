@@ -7,15 +7,9 @@ import '../services/profile_service.dart';
 import '../services/recaptcha_service.dart';
 import '../theme/app_theme.dart';
 
-/// หน้าตั้งรหัสผ่านใหม่สำหรับผู้ใช้ที่ล็อกอินอยู่ (เข้าจากหน้าโปรไฟล์/ตั้งค่า)
-///
-/// ใช้ access token ปัจจุบันเป็นหลักฐานยืนยันตัวตน — เซิร์ฟเวอร์เปลี่ยนรหัสให้ทันที
-/// จึงไม่ต้องส่ง OTP ทางอีเมลเหมือนเส้นทาง "ลืมรหัสผ่าน" ของคนที่ล็อกอินไม่ได้
-/// และไม่ต้องให้ผู้ใช้กรอกรหัสผ่านเดิม (เซิร์ฟเวอร์ไม่มีทางตรวจให้ ถ้าไม่ล็อกอินใหม่)
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key, this.submit = defaultSubmit});
 
-  /// จุดเชื่อมสำหรับเทสต์ — ค่าเริ่มต้นยิงเซิร์ฟเวอร์จริง
   final Future<Map<String, dynamic>> Function(String newPassword) submit;
 
   static Future<Map<String, dynamic>> defaultSubmit(String newPassword) =>
@@ -43,7 +37,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
-  /// เงื่อนไขเดียวกับตอนสมัครสมาชิก (register_screen) เพื่อไม่ให้ตั้งรหัสที่ระบบอื่นไม่รับ
   static bool _hasMinLength(String value) => value.length >= 8;
   static bool _hasLetterCase(String value) =>
       value.contains(RegExp(r'[A-Z]')) && value.contains(RegExp(r'[a-z]'));
@@ -57,7 +50,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _hasDigit(value) &&
       _hasSymbol(value);
 
-  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
   Future<void> _openRecaptcha() async {
     final token = await RecaptchaSheet.show(context);
     if (!mounted || token == null || token.isEmpty) return;
@@ -101,7 +93,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
-    // เซิร์ฟเวอร์บอกว่า token ใช้ไม่ได้แล้ว — ปลดล็อกด้วย PIN ไม่ได้อีก ต้องล็อกอินใหม่
     if (AuthService.isDeadSession(result)) {
       await AuthService().clearAuthData();
       if (!mounted) return;
@@ -250,7 +241,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       controller: _newController,
       obscure: _obscureNew,
       onToggleObscure: () => setState(() => _obscureNew = !_obscureNew),
-      // ต้องวาดใหม่ทุกครั้งที่พิมพ์ เพื่ออัปเดตเครื่องหมายถูกใน [_buildRules]
       onChanged: (_) => setState(() {}),
       validator: (value) {
         final v = value ?? '';
@@ -344,7 +334,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 
-  /// เช็กลิสต์แบบเห็นสด ๆ ว่าขาดอะไร — ดีกว่าให้ validator ฟ้องทีละข้อ
   Widget _buildRules(CustomColors customColors) {
     final value = _newController.text;
     final rules = <({String label, bool passed})>[

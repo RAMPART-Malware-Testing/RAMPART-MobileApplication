@@ -66,8 +66,6 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   String _formatDate(DateTime? date) {
     if (date == null) return 'ไม่ทราบวันที่';
-    // เซิร์ฟเวอร์ส่งเวลามาเป็น UTC — ต้องแปลงเป็นเวลาท้องถิ่นก่อนแสดง
-    // ไม่งั้นผู้ใช้ในไทยจะเห็นเวลาย้อนหลังไป 7 ชั่วโมง
     final formatter = DateFormat('d MMM yyyy HH:mm', 'th');
     return formatter.format(date.toLocal());
   }
@@ -223,11 +221,8 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       itemCount: _loginEntries.length,
       itemBuilder: (context, index) {
         final entry = _loginEntries[index];
-        // backend บันทึกการล็อกอินที่ข้าม OTP สำเร็จไว้ว่า success_device_bypass
-        // จึงต้องดูคำขึ้นต้น ไม่ใช่เทียบคำว่า success ตรงตัว
         final status = entry.status?.toLowerCase() ?? '';
         final isSuccess = status.startsWith('success');
-        // otp_required คือขั้นกลางของการล็อกอินปกติ ไม่ใช่ความล้มเหลว
         final isPendingOtp = !isSuccess && status == 'otp_required';
         final statusLabel = isSuccess
             ? 'สำเร็จ'

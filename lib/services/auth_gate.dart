@@ -24,7 +24,7 @@ class AuthGate extends StatelessWidget {
         }
 
         final String? token = snapshot.data;
-        
+
         if (token != null && token.isNotEmpty) {
           return const MainScreen();
         } else {

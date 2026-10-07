@@ -13,7 +13,6 @@ import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
 import '../widgets/report_filter_bar.dart';
 
-/// พารามิเตอร์ของหนึ่งคำขอ — รวมตัวกรองทั้งหมดไว้ที่เดียวกับหน้ารายงานของผู้ใช้
 class PublicReportsQuery {
   const PublicReportsQuery({
     required this.page,
@@ -34,19 +33,10 @@ class PublicReportsQuery {
   final int sortDirection;
 }
 
-/// จุดเชื่อมสำหรับเทสต์ — ค่าเริ่มต้นยิงเซิร์ฟเวอร์จริง
 typedef PublicReportsLoader = Future<PublicReportsPage> Function(
   PublicReportsQuery query,
 );
 
-/// หน้า "Public Reports" — รายงานสาธารณะทั้งหมด แบ่งหน้าโดยเซิร์ฟเวอร์
-///
-/// หน้า dashboard โชว์แค่ 5 อันดับแรก ปุ่ม "ดูทั้งหมด" พามาที่นี่ ซึ่งทำหน้าที่
-/// เดียวกับแท็บ Reports แต่เป็นของ *ทุกคน* ไม่ใช่เฉพาะของผู้ใช้ และดึงจาก
-/// `POST /api/analy/v1/dashboard/reports` ซึ่งรับ page/limit ได้จริง
-///
-/// ใช้งานได้สองแบบ: แท็บที่ 4 ของ [MainScreen] (ส่ง [asTab] = true) หรือหน้าที่ถูก
-/// push ทับบนเส้นทาง `/public-reports`
 class PublicReportsScreen extends StatefulWidget {
   const PublicReportsScreen({
     super.key,
@@ -56,11 +46,6 @@ class PublicReportsScreen extends StatefulWidget {
 
   final PublicReportsLoader loadPage;
 
-  /// true เมื่อหน้านี้ถูกฝังเป็นแท็บของ `MainScreen`
-  ///
-  /// สองผลที่ตามมา: ซ่อนปุ่มย้อนกลับ (กดย้อนจากแท็บจะปิดทั้งหน้าแรก ซึ่งไม่ใช่
-  /// สิ่งที่ผู้ใช้ต้องการ) และยังไม่ยิงข้อมูลตอนเปิดแอป เพราะ dashboard ดึง
-  /// หน้าแรกของรายงานสาธารณะไปแล้วในชุดเดียว — จะยิงเมื่อผู้ใช้กดแท็บเข้ามาจริง
   final bool asTab;
 
   static Future<PublicReportsPage> defaultLoadPage(PublicReportsQuery query) {
@@ -101,24 +86,14 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
   bool _loadingMore = false;
   String _error = '';
 
-  /// กำลังรีเฟรชเงียบอยู่ (แตะแท็บ / ตัวจับเวลา 1 นาที) — แยกจาก [_loading] เพราะ
-  /// ต้องไม่ล้างรายการเดิมทิ้ง แต่ยังบอกผู้ใช้ว่ากำลังยิงข้อมูลใหม่
   bool _refreshing = false;
 
-  /// คำขอหน้าแรกยังวิ่งอยู่ — กันตัวจับเวลากับการกดแท็บยิงซ้อนคำขอเดิม
   bool _fetching = false;
 
-  /// คำสั่งของผู้ใช้ (เปลี่ยนตัวกรอง/กดโหลดใหม่) มาถึงระหว่างที่คำขอเดิมยังวิ่งอยู่
-  /// — ห้ามทิ้ง ต้องยิงต่อทันทีที่คำขอเดิมเสร็จ ไม่งั้นตัวกรองที่โชว์กับข้อมูลที่เห็น
-  /// จะไม่ตรงกัน
   bool _pendingFirstPage = false;
 
-  /// เวลาที่ดึงหน้าแรกสำเร็จครั้งล่าสุด — กดแท็บเข้ามาใหม่ภายใน [TabCache.ttl]
-  /// ยังใช้ของเดิมได้ ไม่ต้องยิงซ้ำ
   DateTime? _lastLoadedAt;
 
-  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
-  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
   TabAutoRefresh? _autoRefresh;
 
   @override
@@ -137,8 +112,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       onRefresh: _refreshFromTimer,
       isVisible: _isRouteVisible,
     );
-    // แท็บนี้ถูกสร้างค้างไว้ตั้งแต่เปิดแอป (IndexedStack) — โหลดเฉพาะเมื่อถูกเลือก
-    // อยู่จริง ถ้าเปิดแอปมาที่แท็บอื่น (กรณีปกติ) จะรอจนผู้ใช้กดแท็บเข้ามา
     if (TabRefreshBus.currentIndex == TabRefreshBus.publicTab) _loadFirstPage();
   }
 
@@ -153,12 +126,9 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     super.dispose();
   }
 
-  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
-  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
   bool _isRouteVisible() =>
       mounted && (ModalRoute.of(context)?.isCurrent ?? true);
 
-  /// ผู้ใช้เพิ่งกดแท็บ Public Reports
   void _onTabSelected() {
     if (TabRefreshBus.currentIndex != TabRefreshBus.publicTab) return;
     if (_fetching || _loadingMore) return;
@@ -167,7 +137,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     _loadFirstPage(silent: _items.isNotEmpty);
   }
 
-  /// ครบรอบจากตัวจับเวลา — ยิงเงียบเสมอ เพราะผู้ใช้อาจกำลังอ่านรายการอยู่
   void _refreshFromTimer() {
     if (_fetching || _loadingMore || _refreshing) return;
     _loadFirstPage(silent: true);
@@ -181,7 +150,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     }
   }
 
-  /// รวมตัวกรองที่ผู้ใช้เลือกไว้ — เปลี่ยนตัวกรองแล้วต้องยิงใหม่จากหน้า 1 เสมอ
   PublicReportsQuery _query(int page) => PublicReportsQuery(
     page: page,
     limit: _pageSize,
@@ -192,15 +160,8 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     sortDirection: _sortDirection,
   );
 
-  /// ดึงหน้าแรกใหม่ด้วยตัวกรองปัจจุบัน
-  ///
-  /// [silent] = รีเฟรชเบื้องหลัง (แตะแท็บ / ตัวจับเวลา) — ไม่ล้างรายการที่แสดงอยู่
-  /// และถ้าดึงไม่สำเร็จให้คงของเดิมไว้ ต่างจากการโหลดที่ผู้ใช้สั่งเองซึ่งต้องเห็น
-  /// สปินเนอร์และรู้ว่าเกิดอะไรขึ้น
   Future<void> _loadFirstPage({bool silent = false}) async {
     if (_fetching || _loadingMore || _refreshing) {
-      // ตัวจับเวลายิงทับคำขอเดิมปล่อยผ่านได้ (รอบหน้ารออยู่อีก 1 นาที) แต่คำสั่ง
-      // ของผู้ใช้ต้องไม่หาย
       if (!silent) _pendingFirstPage = true;
       return;
     }
@@ -228,7 +189,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       _loading = false;
       _refreshing = false;
       if (result.error.isNotEmpty) {
-        // ของเดิมที่แสดงอยู่มีค่ากว่า error — ไม่ทับด้วยหน้าจอว่าง
         if (silent && _items.isNotEmpty) return;
         _items = const [];
         _page = 1;
@@ -250,7 +210,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     _drainPendingFirstPage();
   }
 
-  /// ยิงคำขอที่ผู้ใช้สั่งค้างไว้ตอนที่ยังมีคำขออื่นวิ่งอยู่
   void _drainPendingFirstPage() {
     if (!_pendingFirstPage) return;
     _pendingFirstPage = false;
@@ -278,8 +237,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
       return;
     }
 
-    // เซิร์ฟเวอร์แคชผลลัพธ์ไว้ 5 วินาที รายการขอบเขตจึงอาจซ้ำกับที่แสดงอยู่
-    // ตัดด้วย task_id กันโผล่สองครั้ง
     final seen = _items.map((item) => item.taskId).toSet();
     setState(() {
       _loadingMore = false;
@@ -401,7 +358,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      // ไม่มีปุ่มย้อนกลับในโหมดแท็บ จึงไม่ต้องเว้นที่ให้ปุ่ม
       padding: EdgeInsets.fromLTRB(widget.asTab ? 16 : 8, widget.asTab ? 16 : 8, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,8 +404,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
               ),
             ),
           ),
-          // ชุดตัวกรองชุดเดียวกับแท็บ Reports — backend รองรับครบทั้งหมด
-          // (`ReportsHistoryParams`) ผู้ใช้จึงกรองชุดเดียวกันได้ทั้งสองหน้า
           ReportSearchField(
             controller: _searchController,
             onChanged: _onSearchChanged,
@@ -474,8 +428,6 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
             sortDirection: _sortDirection,
             onSort: _selectSort,
           ),
-          // สัญญาณว่ากำลังรีเฟรชเงียบอยู่ (แตะแท็บ / ตัวจับเวลานาที) — แถบนี้มี
-          // เฉพาะตอนมีคำขอวิ่งอยู่ ไม่ใช่ ticker ค้าง (R2)
           if (_refreshing) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(

@@ -1,9 +1,5 @@
-/// Parser แบบ defensive สำหรับ raw report ของแต่ละเครื่องมือ
-///
-/// Backend ส่ง JSON ดิบโดยไม่มี schema ตายตัว ทุก accessor ต้องทน field หาย/ผิดชนิด
 library;
 
-// ---------- Helper ----------
 
 Map<String, dynamic>? _asMap(dynamic v) {
   if (v is Map<String, dynamic>) return v;
@@ -45,7 +41,6 @@ int _count(dynamic v) {
   return 0;
 }
 
-// ---------- VirusTotal ----------
 
 class EngineResult {
   const EngineResult({
@@ -83,7 +78,6 @@ class VirusTotalReport {
   int get total =>
       stats.values.fold<int>(0, (sum, value) => sum + value);
 
-  /// จัดกลุ่ม engine ตาม category โดยข้ามกลุ่มว่าง
   List<MapEntry<String, List<EngineResult>>> grouped() {
     final groups = <String, List<EngineResult>>{};
     for (final engine in engines) {
@@ -103,7 +97,6 @@ class VirusTotalReport {
     ];
   }
 
-  /// กรองด้วยชื่อ engine แบบ case-insensitive
   List<EngineResult> whereEngine(String query) {
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return engines;
@@ -144,7 +137,6 @@ class VirusTotalReport {
   }
 }
 
-// ---------- MobSF ----------
 
 class MobsfFinding {
   const MobsfFinding({
@@ -236,7 +228,6 @@ class MobsfReport {
   int get secure => findings.where((f) => f.category == 'Secure').length;
   int get hotspot => findings.where((f) => f.category == 'Hotspot').length;
 
-  /// สูตรเปอร์เซ็นต์: floor(n / max(1, sum) * 100) โดยไม่รวม hotspot
   int severityPercent(int count) {
     final sum = high + medium + info + secure;
     if (sum == 0) return 0;
@@ -320,7 +311,6 @@ class MobsfReport {
   }
 }
 
-// ---------- CAPE ----------
 
 class CapeReport {
   const CapeReport({
@@ -460,7 +450,6 @@ class CapeReport {
   }
 }
 
-// ---------- Wrapper ----------
 
 class ToolReport {
   const ToolReport({

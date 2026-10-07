@@ -18,8 +18,6 @@ class _ToolChip {
   final num? score;
 }
 
-/// ช่องใส่ตัวดึงประวัติ ใช้ในเทสต์แทนการยิงเครือข่าย — รูปแบบเดียวกับ
-/// `DashboardScreen.load` ที่ฉีดข้อมูลชุดเดียว
 typedef HistoryLoader =
     Future<AnalysisHistoryPage> Function({
       required int page,
@@ -42,8 +40,6 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  /// ดึงจากเซิร์ฟเวอร์ทีละ 5 รายการ — backend รับ page/limit จริง
-  /// (`schemas/analy.py`) การแบ่งหน้าเลยไม่ได้ทำในเครื่อง
   static const int _pageSize = 5;
   final AnalysisService _service = AnalysisService();
   final ScrollController _scrollController = ScrollController();
@@ -55,16 +51,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _loading = true;
   bool _loadingMore = false;
 
-  /// รีเฟรชเงียบเวลากดแท็บ — แยกจาก [_loading] เพราะต้องไม่ล้างรายการเดิม แต่ยังต้อง
-  /// บอกผู้ใช้ให้รู้ว่ากำลังยิงใหม่ ไม่งั้นการกดแท็บดูเหมือนไม่มีอะไรเกิดขึ้น
   bool _refreshing = false;
 
-  /// ผู้ใช้กดแท็บขณะที่คำขอเดิมยังค้างอยู่ — เก็บไว้ยิงต่อเมื่อคำขอเดิมเสร็จ
-  /// เดิมกดแล้ว `return` ทิ้งทันที กดกี่ครั้งก็ไม่มีผลจนกว่าคำขอเดิมจะเสร็จ
   bool _pendingTabRefresh = false;
 
-  /// ยิงข้อมูลใหม่เองทุก [TabRefreshBus.autoRefreshInterval] ตราบใดที่แท็บนี้
-  /// ถูกเปิดดูอยู่ (ดู [TabAutoRefresh])
   late final TabAutoRefresh _autoRefresh;
   String? _error;
   String _selectedStatus = '';
@@ -105,18 +95,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  /// ผู้ใช้เพิ่งกดแท็บ Reports
-  ///
-  /// รีเฟรชแบบเงียบ (ไม่ล้างรายการเดิม) แต่ยังขึ้นแถบบาง ๆ ให้เห็นว่ากำลังยิงใหม่ —
-  /// เดิมไม่มีสัญญาณใด ๆ เลย ผู้ใช้จึงเหมือนกดไม่ได้ผล แม้คำขอจะยิงออกไปแล้ว
-  /// ส่วนจะใช้แคชในหน่วยความจำหรือยิงใหม่ ปล่อยให้ `TabCache` (อายุ 4 วินาที) ตัดสิน
   void _onTabSelected() {
     if (TabRefreshBus.currentIndex != TabRefreshBus.reportsTab) return;
-    // กำลังรีเฟรชเงียบอยู่ (ตัวจับเวลาหรือการกดแท็บครั้งก่อน) — ข้อมูลใหม่กำลัง
-    // มาถึงแล้ว ยิงซ้ำตอนนี้มีแต่เปลือง
     if (_refreshing) return;
-    // คำขอเดิมยังค้าง — Dio รอได้ถึง 30 วินาที ถ้าทิ้งการกดไปเฉย ๆ ผู้ใช้จะ
-    // กดซ้ำอีกกี่ครั้งก็ยังไม่มีผล จำไว้ยิงต่อเมื่อคำขอเดิมเสร็จแทน
     if (_loading || _loadingMore) {
       _pendingTabRefresh = true;
       return;
@@ -124,19 +105,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadFirstPage(silent: true);
   }
 
-  /// หน้าจอยังอยู่บนสุดของสแตกไหม — ถ้ามีหน้ารายละเอียดถูก push ทับอยู่
-  /// ตัวจับเวลาไม่ต้องยิงข้อมูลให้เปล่า
   bool _isRouteVisible() =>
       mounted && (ModalRoute.of(context)?.isCurrent ?? true);
 
-  /// ครบรอบจากตัวจับเวลา — ต่างจากการกดแท็บตรงที่ถ้ากำลังยิงอยู่แล้วปล่อยรอบนี้
-  /// ผ่านไปเลย ไม่ต้องจำไว้ยิงต่อ (รอบหน้าอีก 1 นาทีรออยู่)
   void _refreshFromTimer() {
     if (_loading || _loadingMore || _refreshing) return;
     _loadFirstPage(silent: true);
   }
 
-  /// ยิงหน้าที่ [page] ด้วยตัวกรองปัจจุบัน — เส้นทางเดียวทั้งเทสต์และตัวจริง
   Future<AnalysisHistoryPage> _fetch(int page, {bool force = false}) {
     final loader = widget.loadHistory;
     if (loader != null) {
@@ -163,8 +139,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// [force] = ผู้ใช้สั่งเอง (ดึงลง/ปุ่มลองใหม่) ข้ามแคช 4 วินาที
-  /// [silent] = ไม่ล้างรายการเดิมถ้าดึงใหม่ไม่สำเร็จ
   Future<void> _loadFirstPage({bool force = false, bool silent = false}) async {
     if (!silent && _scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -181,8 +155,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final page = await _fetch(1, force: force);
     if (!mounted) return;
 
-    // token ยังไม่หมดอายุแต่ผู้ใช้ไม่มีในฐานข้อมูลแล้ว — กดลองใหม่ไม่มีทางสำเร็จ
-    // ต้องล้าง session และให้ล็อกใหม่ ไม่งั้นค้างเป็นหน้าจอ error ที่กู้ไม่ได้
     if (!page.success && (page.status == 401 || page.status == 403)) {
       setState(() {
         _loading = false;
@@ -205,7 +177,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _loading = false;
       _refreshing = false;
       if (!page.success) {
-        // ของเดิมที่แสดงอยู่ยังมีค่ากว่า error — ไม่ทับด้วยหน้าจอว่าง
         if (silent && _items.isNotEmpty) return;
         _items = const [];
         _pagination = null;
@@ -219,7 +190,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     });
 
-    // ปลดบัสที่กดแท็บไว้ระหว่างรอ — กดหลายครั้งรวมเป็นคำขอเดียว
     if (_pendingTabRefresh) {
       _pendingTabRefresh = false;
       _loadFirstPage(silent: true);
@@ -242,7 +212,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
     });
 
-    // ผู้ใช้อาจกดแท็บระหว่างที่เลื่อนโหลดหน้าถัดไปอยู่ — ปลดบัสนั้นตรงนี้
     if (_pendingTabRefresh) {
       _pendingTabRefresh = false;
       _loadFirstPage(silent: true);
@@ -433,8 +402,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             sortDirection: _sortDirection,
             onSort: _selectSort,
           ),
-          // สัญญาณว่ากดแท็บแล้วกำลังยิงใหม่ — เหมือนแถบบาง ๆ ที่ Dashboard ใช้
-          // ปรากฏเฉพาะตอนคำขอค้างอยู่เท่านั้น ไม่มี ticker ค้างตอนว่าง (R2)
           if (_refreshing) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(
@@ -496,8 +463,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     }
     final hasNext = _pagination?.hasNext ?? false;
-    // หางของรายการคือ แถวโหลดเพิ่ม/สปินเนอร์ (ถ้ามี) + บรรทัดนับ "แสดง X จาก Y"
-    // เดิมการแบ่งหน้าทำงานเงียบมาก ผู้ใช้มองไม่ออกว่ามีหน้าถัดไปหรือรายการหมดแล้ว
     final tailCount = 1 + ((hasNext || _loadingMore) ? 1 : 0);
     return RefreshIndicator(
       onRefresh: () => _loadFirstPage(force: true),
@@ -525,8 +490,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// ปุ่มโหลดหน้าถัดไป — infinite scroll ยังทำงานอยู่เหมือนเดิม แต่ปุ่มนี้ทำให้
-  /// ผู้ใช้เห็นว่ายังมีรายการต่อ และกดเองได้โดยไม่ต้องเลื่อนให้สุดจอ
   Widget _buildLoadMoreRow() {
     final pagination = _pagination;
     final next = (pagination?.page ?? 1) + 1;
@@ -553,7 +516,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// บรรทัดสรุปว่าดูมาแล้วกี่รายการจากทั้งหมดกี่รายการ
   Widget _buildPageFooter() {
     final pagination = _pagination;
     if (pagination == null) return const SizedBox.shrink();
@@ -576,8 +538,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// หน้าจอ error ต้องดึงลงรีเฟรชได้ด้วย — เดิมเป็น `Center` ธรรมดาที่ไม่เลื่อนได้
-  /// ผู้ใช้จึงกู้จากหน้านี้ได้ทางเดียวคือกดปุ่มเล็ก ๆ "ลองใหม่"
   Widget _buildError(String message) {
     return RefreshIndicator(
       onRefresh: () => _loadFirstPage(force: true),

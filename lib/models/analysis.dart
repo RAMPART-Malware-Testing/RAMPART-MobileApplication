@@ -1,14 +1,7 @@
-/// โมเดลของระบบวิเคราะห์ไฟล์ (RAMPART analysis API)
-///
-/// โครงสร้าง response ยึดตามซอร์สของ backend (RAMPART-API-SERVERv1) เพราะ
-/// OpenAPI spec ระบุแค่ request ส่วน response เป็น `"schema":{}` ว่างเปล่า
-/// ทุก fromJson จึงต้องทนทาน: key หาย, ค่า null, ตัวเลขมาเป็น int/double/String
-/// และค่าที่บางครั้งเป็น string บางครั้งเป็น list ต้องไม่ทำให้ throw
 library;
 
 import 'dart:convert';
 
-// ---------- helper สำหรับ parse แบบทนทาน ----------
 
 String? _asString(dynamic v) {
   if (v == null) return null;
@@ -70,7 +63,6 @@ Map<String, dynamic>? _asMap(dynamic v) {
   return null;
 }
 
-/// tool_notes บางครั้งมาเป็น JSON string บางครั้งมาเป็น map
 Map<String, String> _asStringMap(dynamic v) {
   final out = <String, String>{};
   dynamic source = v;
@@ -101,7 +93,6 @@ Map<String, String> _asStringMap(dynamic v) {
   return out;
 }
 
-// ---------- สถานะของงานวิเคราะห์ ----------
 
 enum AnalysisTaskStatus {
   dispatching,
@@ -132,8 +123,6 @@ enum AnalysisTaskStatus {
       this == AnalysisTaskStatus.success || this == AnalysisTaskStatus.failed;
 }
 
-/// สถานะของเครื่องมือแต่ละตัว — normalize ค่าที่ backend ส่งมาแบบปนกัน
-/// (true/"success"/"completed"/false/"skipped"/"processing"...) ให้เป็นชุดเดียว
 enum ToolRunStatus {
   waiting,
   running,
@@ -170,7 +159,6 @@ enum ToolRunStatus {
   }
 }
 
-// ---------- อัปโหลด ----------
 
 class UploadTokenResult {
   final bool success;
@@ -231,11 +219,8 @@ class UploadResult {
     this.statusCode = 0,
   });
 
-  /// Server attached this call to an already-analysed file: no new worker job
-  /// was created and [taskId] points at the existing analysis.
   bool get isDuplicate => deduplicated || (found == true && !gapFilled);
 
-  /// check-hash hit, or an upload response marked `queue_state: reused`.
   bool get isReused =>
       (deduplicated && queueState?.trim().toLowerCase() == 'reused') ||
       (found == true && !gapFilled);
@@ -243,8 +228,6 @@ class UploadResult {
   bool get isCompletedReuse =>
       isReused && status?.trim().toLowerCase() == 'success';
 
-  /// Prior analysis had gaps in one or more tools, so the backend re-dispatched
-  /// only the missing ones under a fresh task id.
   bool get isGapFilled =>
       gapFilled || queueState?.trim().toLowerCase() == 'gap_filled';
 
@@ -269,7 +252,6 @@ class UploadResult {
       UploadResult(success: false, message: message, statusCode: status);
 }
 
-// ---------- ความคืบหน้า ----------
 
 class ToolProgress {
   final ToolRunStatus status;
@@ -322,7 +304,6 @@ class AnalysisProgress {
   ToolProgress? tool(String name) => tools[name];
 }
 
-// ---------- คะแนนจากโมเดล ML ----------
 
 class RampartAiScore {
   final double? malwareProbability;
@@ -337,8 +318,6 @@ class RampartAiScore {
     this.confidence,
   });
 
-  /// backend ส่งมาได้ทั้ง object {malware_probability, prediction, ...} และเลขล้วน
-  /// ถ้าเป็นเลขล้วนให้ถือว่าเป็นเปอร์เซ็นต์ (หาร 100 เมื่อเกิน 1)
   factory RampartAiScore.fromJson(dynamic raw) {
     final map = _asMap(raw);
     if (map != null) {
@@ -361,7 +340,6 @@ class RampartAiScore {
   }
 }
 
-// ---------- รายงานผลวิเคราะห์ ----------
 
 class AnalysisReport {
   final String taskId;
@@ -461,7 +439,6 @@ class AnalysisReport {
     );
   }
 
-  /// tools มาเป็น CSV เช่น "virustotal,mobsf,cape,rampart_ai,gemini"
   List<String> get toolList {
     final raw = tools;
     if (raw == null || raw.trim().isEmpty) return const [];
@@ -472,15 +449,12 @@ class AnalysisReport {
         .toList();
   }
 
-  /// Gemini ถูกส่งกลับในรายงานงานหลัก ไม่ต้องเรียก report_target แยก
   static bool usesEmbeddedReport(String tool) => toolRouteKey(tool) == 'gemini';
 
-  /// ชื่อ route ของ report_target/download ใช้ "rampartai" ไม่มี underscore
   static String toolRouteKey(String tool) =>
       tool.trim() == 'rampart_ai' ? 'rampartai' : tool.trim();
 }
 
-// ---------- สถานะงาน (poll) ----------
 
 class TaskStatusResult {
   final bool success;
@@ -531,7 +505,6 @@ class TaskStatusResult {
 
   AnalysisTaskStatus get taskStatus => AnalysisTaskStatus.fromRaw(status);
 
-  /// backend บอกว่าไม่พบงานด้วย success:false (message = TASK_NOT_FOUND)
   bool get isNotFound => !success;
 
   bool get isSuccess => success && status?.toLowerCase() == 'success';
@@ -541,7 +514,6 @@ class TaskStatusResult {
   bool get isRunning => success && !isSuccess && !isFailed;
 }
 
-// ---------- ผลรายเครื่องมือ ----------
 
 class ToolReportResult {
   final bool success;
@@ -585,7 +557,6 @@ class ToolReportResult {
       );
 }
 
-// ---------- ประวัติการวิเคราะห์ ----------
 
 class AnalysisHistoryItem {
   final String aid;
@@ -607,8 +578,6 @@ class AnalysisHistoryItem {
   final double? capeScore;
   final RampartAiScore? rampartAiScore;
 
-  /// endpoint `dashboard/reports` ส่ง `uploaded_by: {username, avatar_url}` มาให้
-  /// รายงานสาธารณะ ส่วน `history` ไม่ส่ง field นี้
   final String? uploadedByUsername;
 
   AnalysisHistoryItem({

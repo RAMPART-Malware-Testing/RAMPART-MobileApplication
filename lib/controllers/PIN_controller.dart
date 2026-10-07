@@ -78,17 +78,13 @@ class PINController extends GetxController {
 
   Future<void> _verifyPin() async {
     isLoading.value = true;
-    // อ่าน PIN กับตัวนับพร้อมกันในรอบเดียว (ลดการเข้าถึง Keystore)
     final stored = await Future.wait([
       _storage.read(key: 'user_pin'),
       _storage.read(key: 'pin_wrong_count'),
     ]);
     String? savedPin = stored[0];
-    // ใช้ค่าที่เก็บไว้จริงเป็นหลัก กันตัวนับรีเซ็ตเมื่อปิดแอปแล้วเปิดใหม่
     final persistedWrong = int.tryParse(stored[1] ?? '');
 
-    // ไม่มี PIN ที่เก็บไว้ = ยังไม่เคยตั้ง PIN → ไม่ควรอยู่หน้า verify
-    // ให้ล้างข้อมูลแล้วกลับไปหน้า login
     if (savedPin == null || savedPin.isEmpty) {
       isLoading.value = false;
       pin.value = '';
@@ -99,8 +95,6 @@ class PINController extends GetxController {
     }
 
     if (pin.value == savedPin) {
-      // PIN ถูกต้อง: ปลดล็อกทันทีโดยไม่รอเครือข่าย
-      // เดิมบังคับให้ refresh token สำเร็จก่อน ถ้าเน็ตล่มจะถูกล้างเซสชันและต้อง login ใหม่
       wrongCount.value = 0;
       await _storage.write(key: 'pin_wrong_count', value: '0');
       isLoading.value = false;
@@ -128,9 +122,6 @@ class PINController extends GetxController {
     }
   }
 
-  /// ต่ออายุ token เบื้องหลังหลังปลดล็อกแล้ว
-  /// - 401/403 = เซสชันตายจริง -> ล้างข้อมูลและกลับไปหน้า login
-  /// - 0 = คำขอไปไม่ถึงเซิร์ฟเวอร์ (เน็ต/timeout) -> คงเซสชันไว้ ไม่บังคับ login ใหม่
   Future<void> _refreshSessionInBackground() async {
     final res = await authService.refreshAccessToken();
     if (res['success'] == true) return;

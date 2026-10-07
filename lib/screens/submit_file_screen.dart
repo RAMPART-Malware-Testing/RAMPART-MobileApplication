@@ -25,10 +25,6 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
   double _uploadProgress = 0;
   String? _error;
 
-  /// แตะครั้งเดียวจบ: เลือกไฟล์แล้วส่งวิเคราะห์ทันที
-  ///
-  /// เดิมแยกเป็นสองขั้น (แตะช่องเลือกไฟล์ แล้วค่อยกดปุ่ม "อัปโหลดและวิเคราะห์")
-  /// ซึ่งผู้ใช้ต้องกดสองครั้งทั้งที่เป็นเจตนาเดียวกัน
   Future<void> _pickAndUpload() async {
     if (_isUploading) return;
     final picked = await _pickFile();
@@ -36,7 +32,6 @@ class _SubmitFileScreenState extends State<SubmitFileScreen> {
     await _startUpload();
   }
 
-  /// เปิดหน้าต่างเลือกไฟล์ — คืนข้อมูลไฟล์ที่เลือก หรือ null เมื่อยกเลิก/เลือกไม่ได้
   Future<SelectedFileInfo?> _pickFile() async {
     try {
       if (Get.isRegistered<PINService>()) {

@@ -6,7 +6,6 @@ import 'package:rampart/core/config.dart';
 import 'package:rampart/services/offline_cache.dart';
 import 'package:rampart/services/tab_cache.dart';
 import 'package:rampart/services/session_guard.dart';
-// import 'package:rampart/services/auth_interceptor.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -29,7 +28,6 @@ class AuthService {
         receiveTimeout: const Duration(seconds: 10),
       ),
     );
-    // _http.interceptors.add(AuthInterceptor());
   }
 
   Map<String, dynamic> _buildHeaders({
@@ -69,7 +67,6 @@ class AuthService {
           final data = res.data['data'];
           String accessToken = data['access_token'].toString();
           
-          // รวม Keystore writes พร้อมกันลดรอบการเข้าถึง
           final writes = <Future<void>>[
             _storage.write(key: 'session_token', value: accessToken),
             _storage.write(
@@ -86,7 +83,6 @@ class AuthService {
             ));
           }
           
-          // backend อาจคืน device_token / deviceToken / deiveToken — รองรับทุกแบบ
           final devToken = data['device_token'] ?? data['deviceToken'] ?? data['deiveToken'];
           if (devToken != null && devToken.toString().isNotEmpty) {
             writes.add(_storage.write(key: 'deivetoken', value: devToken.toString()));
@@ -149,7 +145,6 @@ class AuthService {
               writes.add(_storage.write(key: 'refresh_token', value: refreshToken));
             }
             
-            // backend คืน deiveToken (สะกดผิด) เป็นตัว trusted device
             final devToken = data['deiveToken'] ?? data['device_token'] ?? data['deviceToken'];
             if (devToken != null && devToken.toString().isNotEmpty) {
               writes.add(_storage.write(key: 'deivetoken', value: devToken.toString()));
@@ -241,8 +236,6 @@ class AuthService {
     }
   }
 
-  /// ยืนยัน OTP แล้วตั้งรหัสผ่านใหม่ — ใช้กับเส้นทาง "ลืมรหัสผ่าน" ของคนที่ยังไม่ล็อกอิน
-  /// จึงต้องมี `session_type` เป็น forgot_passwd_confirm จากขั้นตอนขอ OTP ก่อน
   Future<Map<String, dynamic>> resetPasswordConfirm({
     required String token,
     required String otp,
@@ -267,13 +260,6 @@ class AuthService {
     }
   }
 
-  /// ตั้งรหัสผ่านใหม่ให้บัญชีที่ล็อกอินอยู่ โดยใช้ access token เป็นหลักฐานยืนยันตัวตน
-  ///
-  /// เป็น endpoint เดียวกับ [resetPassword] แต่คนละโหมด: ถ้าส่ง `token` (type=access)
-  /// มาพร้อม `newPasswd` เซิร์ฟเวอร์จะเปลี่ยนรหัสให้ทันที ไม่ต้องยืนยัน OTP ทางอีเมล
-  /// (โหมดขอ OTP ใช้เมื่อส่งแค่ email ซึ่งเป็นเส้นทางของคนที่ล็อกอินไม่ได้)
-  ///
-  /// ไม่แตะ token/PIN ที่เก็บไว้ — ผู้ใช้ยังอยู่ในเซสชันเดิมหลังเปลี่ยนรหัสผ่าน
   Future<Map<String, dynamic>> changePassword(String newPassword) async {
     final token = await _storage.read(key: 'session_token');
     if (token == null || token.isEmpty || token == 'null') {
@@ -303,7 +289,6 @@ class AuthService {
     }
   }
 
-  /// ข้อความจากเซิร์ฟเวอร์เมื่อคำขอล้มเหลว (backend ส่ง `detail` ของ FastAPI มาด้วย)
   String _messageFrom(Object error, String fallback) {
     if (error is DioException) {
       final data = error.response?.data;
@@ -317,9 +302,6 @@ class AuthService {
     return fallback;
   }
 
-  /// แยกสาเหตุความล้มเหลวของคำขอ refresh:
-  /// - เซิร์ฟเวอร์ตอบกลับด้วย error -> คืน HTTP status code (401/403/422 ...)
-  /// - ไม่ถึงเซิร์ฟเวอร์ (network/DNS/timeout/socket) หรือไม่ทราบสาเหตุ -> คืน 0
   int _failureStatus(Object error) {
     if (error is DioException) {
       final response = error.response;
@@ -382,10 +364,8 @@ class AuthService {
     await _storage.write(key: 'is_authenticated', value: 'true');
   }
 
-  /// โหลดข้อมูลผู้ใช้จาก API เพื่อยืนยันสิทธิ์เจ้าของรายงานก่อนแสดงตัวเลือก privacy
   Future<Map<String, dynamic>> getProfile() async {
     final token = await _storage.read(key: 'session_token');
-    // ข้าม token ที่เป็น null หรือ string 'null' (ตรงกับ analysis_service.dart)
     if (token == null || token.isEmpty || token == 'null') return _errorResponse;
     try {
       final res = await _http.post('/api/profile', data: {'token': token});
@@ -398,7 +378,6 @@ class AuthService {
 
   Future<void> registerFcmToken(String fcmToken) async {
     final accessToken = await _storage.read(key: 'session_token');
-    // 'null' เป็นสตริงที่เคยถูกเขียนลงไปจริงในอดีต จึงต้องกันด้วย ไม่ใช่แค่ค่าว่าง
     if (accessToken == null || accessToken.isEmpty || accessToken == 'null') return;
     try {
       await _http.post(
@@ -410,13 +389,8 @@ class AuthService {
     }
   }
 
-  /// Detach this device from push before the session is cleared.
-  ///
-  /// Without it the account keeps this phone's token, and whoever signs in next
-  /// on the same account would receive this user's analysis results.
   Future<void> unregisterFcmToken() async {
     final accessToken = await _storage.read(key: 'session_token');
-    // 'null' เป็นสตริงที่เคยถูกเขียนลงไปจริงในอดีต จึงต้องกันด้วย ไม่ใช่แค่ค่าว่าง
     if (accessToken == null || accessToken.isEmpty || accessToken == 'null') return;
     try {
       await _http.post('/api/fcm/unregister', data: {'token': accessToken});
@@ -425,8 +399,6 @@ class AuthService {
     }
   }
 
-  /// สถานะที่เซิร์ฟเวอร์ส่งกลับมาเมื่อ session ปัจจุบันใช้ไม่ได้แล้ว
-  /// ทั้งหมดนี้ผู้ใช้ต้องเริ่มยืนยันใหม่จากหน้า login — ไม่ใช่แค่ลอง OTP ใหม่อีกครั้ง
   static const Set<String> deadSessionStatuses = {
     'TOKEN_INVALID',
     'TOKEN_WRONG_TYPE',
@@ -434,17 +406,12 @@ class AuthService {
     'OTP_EXPIRED',
   };
 
-  /// เซิร์ฟเวอร์ตอบ HTTP 200 แม้ session จะตายแล้ว (ไม่ throw) จึงต้องดู field `status`
-  /// ใน body ไม่ใช่ HTTP status code
   static bool isDeadSession(Map<String, dynamic> res) =>
       deadSessionStatuses.contains(res['status']);
 
-  /// ตรวจว่าบัญชีถูกระงับ — delegate ไปยัง SessionGuard เพื่อไม่ซ้ำ string literal
   static bool isAccountBanned(Map<String, dynamic>? res) =>
       SessionGuard.isBanned(res);
 
-  /// ล้างเฉพาะ token ของขั้นตอนยืนยัน OTP ที่ค้างอยู่
-  /// ไม่แตะ PIN หรือ refresh_token เพราะผู้ใช้อาจมี session ที่ใช้ได้อยู่แล้ว
   Future<void> clearStaleSession() async {
     await Future.wait([
       _storage.delete(key: 'session_token'),
@@ -454,7 +421,6 @@ class AuthService {
   }
 
   Future<void> clearAuthData() async {
-    // ลบพร้อมกัน (Future.wait) ลดรอบการเข้าถึง Keystore
     await Future.wait([
       _storage.delete(key: 'session_token'),
       _storage.delete(key: 'refresh_token'),
@@ -466,12 +432,8 @@ class AuthService {
       _storage.delete(key: 'deviceToken'),
       _storage.delete(key: 'is_authenticated'),
       _storage.delete(key: 'pin_wrong_count'),
-      // สวิตช์แจ้งเตือนเป็นค่าประจำเครื่อง ถ้าไม่ล้างคนถัดไปที่ล็อกอินจะไม่ได้
-      // แจ้งเตือนเลยเพราะติดค่าที่คนก่อนปิดไว้
       _storage.delete(key: 'notif_enabled'),
     ]);
-    // ข้อมูลที่แคชไว้เป็นของผู้ใช้คนเดิม — ต้องหายไปพร้อมกับ token
-    // ไม่งั้นคนที่ล็อกอินคนถัดไปบนเครื่องเดียวกันจะเห็นประวัติของคนก่อน
     await OfflineCache.instance.clearAll();
     TabCache.instance.clear();
   }

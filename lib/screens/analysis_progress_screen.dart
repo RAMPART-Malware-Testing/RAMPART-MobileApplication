@@ -26,13 +26,10 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   bool _requestInFlight = false;
   bool _finished = false;
   bool _offline = false;
-  /// poll จบด้วยสถานะล้มเหลวถาวร (ไม่ใช่แค่สะดุดชั่วคราว) — ต้องมีทางไปต่อเสมอ
   bool _failed = false;
   TaskStatusResult? _last;
   String? _transientError;
 
-  /// ตรวจสถานะซ้ำอัตโนมัติหลังเจอ "ล้มเหลว" — backend แคชสถานะไว้ 3 วินาที
-  /// จึงมีโอกาสที่แอป อ่านค่าเก่า (failed) แล้วหยุด poll ทั้งที่งานสำเร็จจริง
   static const int _maxVerifyRetries = 3;
   int _verifyRetries = 0;
   Timer? _verifyTimer;
@@ -52,8 +49,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   @override
   void initState() {
     super.initState();
-    // ออฟไลน์คือปิดการ poll ไปก่อน แล้วค่อยกลับมา poll ต่อเมื่อเน็ตกลับมา
-    // ไม่เช่นนั้นจะยิงคำขอที่ล้มเหลวว่างเปล่าทุก 2.5 วินาที
     _netWorker = ever<bool>(NetworkMonitorService().isOnline, (online) {
       if (online) {
         _startPolling();
@@ -94,8 +89,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     _requestInFlight = false;
     if (!mounted) return;
 
-    // ยังไม่สำเร็จและไม่ได้แปลว่า "จบ" (เซิร์ฟเวอร์สะดุด/เซสชันหมดอายุชั่วคราว)
-    // → แสดงการ์ดชั่วคราวแล้ว poll ต่อ ไม่ตรึงหน้าจอทิ้งแบบเดิม
     if (!result.success && !_isTerminalFailure(result)) {
       setState(() => _transientError = result.message);
       return;
@@ -111,25 +104,18 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
       if (Get.currentRoute == '/analysis-progress') {
         Get.offNamed('/analysis-result', arguments: _taskId);
       } else {
-        // ระหว่างรอผล มีหน้าอื่นขึ้นมาทับแล้ว (เช่น แตะแจ้งเตือนแล้วเปิด
-        // /analysis-result ของงานนี้ก่อน poll จบ) — offNamed จะโดน
-        // preventDuplicates กลืนเงียบ ๆ ทำให้หน้านี้ติดค้างในสแตก
-        // ผู้ใช้กดย้อนกลับมาเจอหน้าค้าง — ถอดตัวเองออกจากสแตกแทน
         Navigator.of(context).removeRoute(ModalRoute.of(context)!);
       }
       return;
     }
 
     if (result.isFailed || !result.success) {
-      // งานล้มเหลวจริง/ไม่พบงาน — หยุด poll แต่ต้องเหลือทางไปต่อ (ลองใหม่/เปิดรายงาน)
       _stopPolling();
       setState(() => _failed = true);
       _scheduleVerifyRetry();
     }
   }
 
-  /// ตรวจสถานะซ้ำเองอีกไม่กี่ครั้ง (ห่างกัน 3 วินาที = เกิน TTL ของแคชฝั่ง server)
-  /// ถ้าจริง ๆ งานสำเร็จแล้ว จะพาไปหน้ารายงานให้อัตโนมัติ ไม่ต้องให้ผู้ใช้กด
   void _scheduleVerifyRetry() {
     if (_verifyRetries >= _maxVerifyRetries) return;
     _verifyRetries++;
@@ -150,7 +136,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
         _scheduleVerifyRetry();
         return;
       }
-      // กลับมารันต่อ (เช่น job ยังไม่จบจริง) — เริ่ม poll ปกติใหม่
       setState(() {
         _failed = false;
         _last = result;
@@ -159,8 +144,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     });
   }
 
-  /// ความล้มเหลวถาวร: งานถูกทำเครื่องหมาย failed, ไม่พบงาน, หรือถูกปฏิเสธสิทธิ์
-  /// ส่วน 5xx/timeout/เน็ตสะดุด ถือว่าชั่วคราว — ต้อง poll ต่อเอง
   bool _isTerminalFailure(TaskStatusResult result) {
     if (result.success) return result.isFailed;
     final message = (result.message ?? '').toUpperCase();
@@ -193,7 +176,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
 
   ToolProgress? _progressFor(String tool) => _last?.progress?.tools[tool];
 
-  /// สถานะดิบจาก backend (ก่อนบังคับลำดับการแสดง)
   ToolRunStatus _rawStatusFor(String tool) {
     final progress = _progressFor(tool);
     if (progress != null) return progress.status;
@@ -358,8 +340,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
   }
 
   Widget _buildPipeline() {
-    // สถานะทั้ง pipeline คำนวณเป็นชุดเดียวเพื่อบังคับให้ stage เปิดตามลำดับ —
-    // Stage 1 เหลืองตั้งแต่เปิดหน้า, Stage 2 ฟ้าจน Stage 1 จบ, Stage 3 ฟ้าจน Stage 2 จบ
     final display = deriveSequentialPipelineStatuses(
       virustotal: _rawStatusFor('virustotal'),
       mobsf: _rawStatusFor('mobsf'),
@@ -613,8 +593,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     );
   }
 
-  /// แจ้งว่าหยุดรอเพราะไม่มีเน็ต — จะกลับไป poll ต่อเองเมื่อเน็ตกลับมา
-  /// จึงไม่ต้องมีปุ่ม "ลองใหม่" เหมือนการ์ด error ปกติ
   Widget _buildOfflineCard() {
     return AnalysisCard(
       status: ToolRunStatus.running,
@@ -637,8 +615,6 @@ class _AnalysisProgressScreenState extends State<AnalysisProgressScreen> {
     );
   }
 
-  /// งานล้มเหลว/ไม่พบงาน — ต้องไม่ทิ้งผู้ใช้ไว้กับป้ายแดงเฉย ๆ
-  /// (เคสจริง: แจ้งเตือนบอกไม่สำเร็จ แต่รายงานถูกสร้างสำเร็จภายหลัง)
   Widget _buildFailedCard() {
     final message = _last?.message;
     return AnalysisCard(

@@ -19,13 +19,10 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // List of screens
   final List<Widget> _screens = const [
     DashboardScreen(),
     SubmitFileScreen(),
     ReportsScreen(),
-    // แท็บ Public Reports — เป็น instance ที่ถูกฝังใน IndexedStack จึงปิดปุ่ม
-    // ย้อนกลับ (จะไปปิดทั้งหน้าแรก) และรอโหลดจนกว่าผู้ใช้จะกดแท็บจริง ๆ
     PublicReportsScreen(asTab: true),
     SettingsScreen(),
   ];
@@ -33,9 +30,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // หน้าอื่น (เช่นปุ่ม "ดูเพิ่มเติม" ของกิจกรรมล่าสุดบน dashboard) สลับแท็บ
-    // ผ่าน TabRefreshBus.select() ได้ — MainScreen ต้องฟังด้วยจึงจะย้าย
-    // IndexedStack ตาม เพราะการเรียก select() เองไม่ได้ setState ที่นี่
     TabRefreshBus.addListener(_onTabBusTick);
   }
 
@@ -51,7 +45,6 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _currentIndex = TabRefreshBus.currentIndex);
   }
 
-  // ใช้สีจาก Theme
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _cyanColor =>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
@@ -65,8 +58,6 @@ class _MainScreenState extends State<MainScreen> {
         children: [
           const OfflineBanner(),
           Expanded(
-            // IndexedStack ไม่ทิ้ง state ของแท็บที่เพิ่งออกจาก (R6 ใน AGENTS.md) —
-            // ถ้าใช้ _screens[_currentIndex] แอปจะ refetch และวาดใหม่ทุกครั้งที่สลับแท็บ
             child: IndexedStack(index: _currentIndex, children: _screens),
           ),
         ],
@@ -133,9 +124,6 @@ class _MainScreenState extends State<MainScreen> {
           setState(() {
             _currentIndex = index;
           });
-          // แท็บถูกสร้างค้างไว้ใน IndexedStack จึงไม่มี initState ใหม่ตอนสลับ —
-          // บัสนี้คือทางเดียวที่หน้าจอจะรู้ว่า "ถึงตาตัวเองแล้ว" ส่วนจะยิงเซิร์ฟเวอร์
-          // จริงหรือใช้แคชเดิมเป็นการตัดสินใจของ TabCache (อายุ 4 วินาที)
           TabRefreshBus.select(index);
         },
         borderRadius: BorderRadius.circular(12),

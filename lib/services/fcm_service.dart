@@ -8,14 +8,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:rampart/services/authService.dart';
 
-/// key เดียวกับที่หน้าตั้งค่าเขียน (ดู lib/screens/settings_screen.dart)
 const String _notifEnabledKey = 'notif_enabled';
 
-/// อ่านค่าที่ผู้ใช้ตั้งไว้ว่าต้องการรับการแจ้งเตือนหรือไม่
-///
-/// อ่านจาก storage ทุกครั้งแทนการจำไว้ในหน่วยความจำ เพราะฟังก์ชันนี้ถูกเรียกจาก
-/// ทั้ง isolate หลักและ isolate เบื้องหลัง ซึ่งไม่แชร์หน่วยความจำกัน
-/// ค่าเริ่มต้นคือเปิด เมื่ออ่านไม่ได้หรือยังไม่เคยตั้ง
 Future<bool> notificationsAllowed() async {
   try {
     final stored = await const FlutterSecureStorage().read(
@@ -47,11 +41,6 @@ final FlutterLocalNotificationsPlugin _localNotifications =
     FlutterLocalNotificationsPlugin();
 bool _notificationsInited = false;
 
-/// ปลายทางที่การแจ้งเตือนได้รับอนุญาตให้เปิด
-///
-/// route ที่ไม่อยู่ในลิสต์ต้องถูกเมิน ไม่ใช่ปล่อยให้ GetMaterialApp ตกไปที่
-/// unknownRoute ซึ่งตั้งไว้เป็นหน้า login — ผู้ใช้ที่แตะแจ้งเตือนจะถูกเด้งออกจาก
-/// session ที่ยังใช้งานได้
 const Set<String> _pushRoutes = {
   '/home',
   '/analysis-progress',
@@ -59,11 +48,8 @@ const Set<String> _pushRoutes = {
   '/help',
 };
 
-/// สองหน้านี้รับ Get.arguments เป็น taskId ตรง ๆ ไม่ใช่ Map
 const Set<String> _pushTaskRoutes = {'/analysis-progress', '/analysis-result'};
 
-/// ห่อ route กับ taskId เป็น JSON เพื่อให้ปลายทางที่ต้องใช้ taskId เปิดได้
-/// แจ้งเตือนที่ไม่มี taskId ยังส่ง route เดี่ยว ๆ เหมือนเดิม
 String _encodePayload(RemoteMessage message) {
   final route = message.data['route'];
   if (route is! String || route.isEmpty) return '';
@@ -74,9 +60,6 @@ String _encodePayload(RemoteMessage message) {
   return route;
 }
 
-/// งานเดิมที่หน้าของมัน (/analysis-progress หรือ /analysis-result) เปิดค้างอยู่
-/// บนสุดของสแตกแล้ว — แตะแจ้งเตือนของงานเดียวกันซ้ำต้องไม่ push หน้าซ้อนกัน
-/// ไม่งั้นกดย้อนกลับจะเจอหน้าเดิมซ้ำ ๆ เหมือนปุ่มย้อนพัง
 bool shouldSkipTaskPushNavigation({
   required String currentRoute,
   required Object? currentArguments,
@@ -93,7 +76,6 @@ void _openFromPush(String? route, String? taskId) {
     debugPrint('[FCM] ไม่รู้จักปลายทางจากการแจ้งเตือน: $route');
     return;
   }
-  // ยังไม่มี navigator (แอปยังไม่ขึ้นหน้าจอ) การเรียกตอนนี้จะถูกทิ้งเงียบ ๆ
   if (Get.key.currentState == null) {
     debugPrint('[FCM] navigator ยังไม่พร้อม ข้ามการเปิด $route');
     return;
@@ -118,7 +100,6 @@ Future<void> _ensureNotificationsInit() async {
   if (_notificationsInited) return;
   _notificationsInited = true;
 
-  // ต้องเป็น drawable (ไม่ใช่ mipmap) ไม่งั้น initialize จะโยน PlatformException(invalid_icon)
   const androidSettings = AndroidInitializationSettings('ic_notification');
   const iosSettings = DarwinInitializationSettings();
   const initSettings = InitializationSettings(
@@ -168,8 +149,6 @@ void _onNotificationTap(NotificationResponse response) {
   _openFromPush(parsed.$1, parsed.$2);
 }
 
-/// payload รุ่นใหม่เป็น JSON ที่พา taskId มาด้วย ส่วนรุ่นเก่าเป็น route เดี่ยว ๆ
-/// คืน null เมื่ออ่านไม่ได้/ไม่มี payload
 (String route, String? taskId)? _parseNotificationPayload(String? payload) {
   if (payload == null || payload.isEmpty) return null;
   if (!payload.startsWith('{')) return (payload, null);
@@ -192,8 +171,6 @@ class FcmService {
   static final FcmService _instance = FcmService._internal();
   factory FcmService() => _instance;
 
-  /// เป็น observable เพราะตอนนี้ Firebase อาจเริ่มหลังจากผู้ใช้ล็อกอินเสร็จแล้ว
-  /// หน้าจอที่ต้องการ token จึงต้องรอค่านี้ ไม่ใช่อ่านครั้งเดียวตอน initState
   final deviceToken = RxnString();
 
   String? _pendingRoute;
@@ -202,10 +179,6 @@ class FcmService {
 
   FcmService._internal();
 
-  /// เตรียมระบบ push คืน true เมื่อ Firebase พร้อมรับข้อความจริง
-  ///
-  /// คืน false เมื่อยังไม่มีเน็ตหรือ Firebase ติดตั้งไม่สำเร็จ — ผู้เรียกต้อง
-  /// ไม่ navigate ต่อจาก [handlePendingInitialMessage] ในกรณีนั้น
   Future<bool> initialize() async {
     if (_initialized) return true;
 
@@ -256,9 +229,6 @@ class FcmService {
       _pendingTaskId = taskId is String ? taskId : null;
     }
 
-    // แอปถูกปิดอยู่แล้วผู้ใช้แตะ "การแจ้งเตือนที่แอปสร้างเอง" (background handler
-    // ยิง local notification) — FCM ไม่มี initial message ให้ ต้องอ่านจาก launch
-    // details ของ plugin ไม่งั้นแตะแล้วแอปเปิดเฉย ๆ ไม่พาไปหน้ารายงาน
     if (_pendingRoute == null) {
       final launchDetails =
           await _localNotifications.getNotificationAppLaunchDetails();
@@ -310,8 +280,6 @@ class FcmService {
     );
   }
 
-  /// ต้องเช็คสวิตช์ก่อน ไม่งั้นการเปิดแอปใหม่จะลงทะเบียนอุปกรณ์กลับเข้าไปทุกครั้ง
-  /// แล้วลบล้างการที่ผู้ใช้ปิดแจ้งเตือนไว้
   Future<void> _registerCurrentToken() async {
     if (!await notificationsAllowed()) return;
     final token = deviceToken.value;

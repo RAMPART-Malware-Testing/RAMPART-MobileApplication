@@ -26,8 +26,6 @@ class _PinVerifyScreenState extends State<PinVerifyScreen> {
     super.dispose();
   }
 
-  // ออกจากระบบ: ล้าง token/PIN ทั้งหมดก่อนนำทางไปหน้า login
-  // กันการแตะซ้ำระหว่างกำลังล้างข้อมูล (double tap)
   Future<void> _handleLogout() async {
     if (_logoutInProgress) return;
     _logoutInProgress = true;

@@ -32,9 +32,6 @@ class _AppLifecycleObserverState extends State<AppLifecycleObserver>
       _syncNetworkMonitor(resumed);
     }
 
-    // ล็อกเฉพาะตอนแอปถูกซ่อนจริง (paused) — ไม่ล็อกตอน inactive เพราะเกิดบ่อย
-    // เช่น มี dialog หรือ permission เด้งทับ หรือตอนกำลังเปิด Activity อื่น
-    // ซึ่งทำให้แอปล็อกกลางคันโดยที่ผู้ใช้ไม่ได้ออกจากแอป
     if (state == AppLifecycleState.paused) {
       _withPin((ps) => ps.evaluateLockOnBackground());
     } else if (resumed) {
@@ -46,11 +43,9 @@ class _AppLifecycleObserverState extends State<AppLifecycleObserver>
     try {
       action(Get.find<PINService>());
     } catch (_) {
-      // ยังไม่ได้ register — รอบถัดไปจะได้ทำต่อ
     }
   }
 
-  /// หยุดวนตรวจเน็ตตอนแอปถูกพับ จะได้ไม่ตื่นมายิงเน็ททิ้งทุก 10 วินาทีทั้งที่ผู้ใช้ไม่ได้อยู่กับแอป
   void _syncNetworkMonitor(bool resumed) {
     try {
       final monitor = Get.find<NetworkMonitorService>();
@@ -60,7 +55,6 @@ class _AppLifecycleObserverState extends State<AppLifecycleObserver>
         monitor.pause();
       }
     } catch (_) {
-      // ยังไม่ได้ register — รอบถัดไปจะได้ทำต่อ
     }
   }
 

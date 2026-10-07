@@ -135,7 +135,6 @@ class _ConfirmScreenState extends State<ConfirmScreen>
         return;
       }
 
-      // ตรวจสถานะพิเศษก่อน
       final status = res['status'];
       
       if (SessionGuard.isBanned(res)) {
@@ -165,7 +164,6 @@ class _ConfirmScreenState extends State<ConfirmScreen>
         return;
       }
 
-      // ถ้า backend ส่ง message มาให้ใช้ข้อความนั้น ไม่งั้นใช้ fallback
       final message = res['message'];
       _showSnackBar(
         (message != null && message.toString().isNotEmpty)
@@ -211,9 +209,6 @@ class _ConfirmScreenState extends State<ConfirmScreen>
     });
   }
 
-  /// session หมดอายุ/ผิดชนิด/ถูกใช้ไปแล้ว — ล้าง token ที่ค้าง แล้วพากลับหน้า login
-  /// ไม่งั้นผู้ใช้จะค้างอยู่หน้านี้ และถ้าปิดแอปแล้วเปิดใหม่จะถูกพาเข้า /home
-  /// ด้วย token ที่ตายแล้ว (ดู PINService.checkLoginStatus)
   Future<void> _handleDeadSession() async {
     setState(() => _isLoading = false);
     await authService.clearStaleSession();

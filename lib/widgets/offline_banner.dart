@@ -4,13 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:rampart/services/network_monitor_service.dart';
 import 'package:rampart/services/tab_cache.dart';
 
-/// แถบเตือนตอนติดต่อเซิร์ฟเวอร์ไม่ได้
-///
-/// บอกสองอย่างเสมอ: (1) ตอนนี้ไม่มีการเชื่อมต่อ และ (2) ข้อมูลบนจอเป็นของเดิม
-/// ที่ดึงไว้ตอนยังเชื่อมต่อได้ ไม่ใช่ข้อมูลปัจจุบัน
-///
-/// ใช้ [Obx] เพื่อวาดใหม่เฉพาะตอนสถานะเน็ตเปลี่ยนจริงๆ ไม่ใช่ทุกเฟรม
-/// และคืน [SizedBox.shrink] เมื่อออนไลน์ เพื่อไม่ให้กินพื้นที่วาง
 class OfflineBanner extends StatelessWidget {
   const OfflineBanner({super.key});
 
@@ -74,7 +67,6 @@ class OfflineBanner extends StatelessWidget {
     );
   }
 
-  /// เวลาที่ดึงข้อมูลสำเร็จครั้งล่าสุด — ไม่ผูก locale เพราะเป็นตัวเลขล้วน
   static String _formatTime(DateTime value) =>
       DateFormat('HH:mm').format(value.toLocal());
 }

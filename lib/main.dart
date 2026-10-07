@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/date_symbol_data_local.dart';
-// เจาะจงแค่ Intl — intl ทั้งไลบรารีมีคลาส TextDirection ของตัวเอง
-// ซึ่งจะชนกับ TextDirection ของ Flutter ที่ใช้ในไฟล์นี้
 import 'package:intl/intl.dart' show Intl;
 import 'package:rampart/services/fcm_service.dart';
 import 'package:rampart/services/network_monitor_service.dart';
@@ -52,10 +50,6 @@ class _BootstrapState extends State<_Bootstrap> {
   Future<void> _start() async {
     final pinService = PINService();
     final monitor = NetworkMonitorService();
-
-    // intl ไม่ได้โหลดข้อมูล locale ให้เอง — หน้าจอที่จัดรูปแบบวันที่เป็นภาษาไทย
-    // (settings, activity history) จะโยน LocaleDataException ตอน build ถ้าไม่โหลดไว้ก่อน
-    // เป็นข้อมูลในหน่วยความจำล้วน ไม่มีการอ่านไฟล์หรือเครือข่าย
     Intl.defaultLocale = 'th';
     await initializeDateFormatting('th');
 
@@ -86,7 +80,6 @@ class _BootstrapState extends State<_Bootstrap> {
     });
   }
 
-  /// เรียกได้ทั้งตอนเปิดแอปและตอนที่ [NetworkMonitorService] แจ้งว่ากลับมาออนไลน์
   Future<void> _initPush() async {
     final ready = await FcmService().initialize();
     if (!ready || !mounted) return;

@@ -3,11 +3,6 @@ import 'package:get/get.dart';
 
 import '../models/analysis.dart';
 
-/// ปุ่มย้อนกลับของหน้าวิเคราะห์ (progress / result / tool-report)
-///
-/// ปกติเท่ากับ Get.back แต่ถ้าสแตกไม่เหลือ route ให้ pop (เช่น สแตกถูก
-/// offAllNamed ล้างระหว่างอยู่หน้านี้) จะกลับไปหน้าหลักแทน — ไม่งั้นปุ่ม
-/// กดแล้วเงียบ ผู้ใช้ติดอยู่ในหน้าโดยกดย้อนไม่ได้
 void popAnalysisScreen() {
   final navigator = Get.key.currentState;
   if (navigator != null && navigator.canPop()) {
@@ -30,8 +25,6 @@ class AnalysisColors {
   static const Color cyan = Color(0xFF22D3EE);
   static const Color blue = Color(0xFF60A5FA);
   static const Color purple = Color(0xFFA78BFA);
-  /// "รอดำเนินการ" — ฟ้าอมซีนแบบ queued ให้รู้ว่าอยู่ในคิวและพร้อมวิ่ง
-  /// (เทาเดิมดูเหมือนปิดใช้งาน และต้องต่างจาก [running] ที่เป็นสีเหลืองอำพัน)
   static const Color waiting = Color(0xFF38BDF8);
   static const Color running = Color(0xFFF59E0B);
   static const Color completed = Color(0xFF34D399);
@@ -221,7 +214,6 @@ ToolRunStatus deriveAnalysisStageStatus(Iterable<ToolRunStatus> statuses) {
   return ToolRunStatus.waiting;
 }
 
-/// สถานะที่ควรแสดงของทั้ง pipeline เมื่อบังคับให้ stage เปิดตามลำดับ
 typedef AnalysisPipelineDisplay = ({
   ToolRunStatus virustotal,
   ToolRunStatus mobsf,
@@ -231,17 +223,6 @@ typedef AnalysisPipelineDisplay = ({
   ToolRunStatus gemini,
 });
 
-/// คำนวณสถานะที่แสดงของแต่ละ stage โดยบังคับลำดับ pipeline
-/// (Stage 1 triage → Stage 2 multi-engine → Stage 3 Gemini)
-///
-/// สถานะดิบจาก backend (`progress.tools.*`) บางครั้งล้ำหน้ากันเอง — เช่น
-/// MobSF ขึ้น `processing` ตั้งแต่แรก ทั้งที่ VirusTotal ยังตรวจไม่จบ และบางครั้ง
-/// ไม่ mark อะไรเลยจน Stage 1 โชว์เป็น "รอดำเนินการ" ทั้งที่มันคือขั้นที่กำลังทำงาน
-/// กฎที่แสดงจึงเป็น: Stage 1 เหลืองตั้งแต่เปิดหน้า, Stage ถัดไปฟ้าจนกว่า stage
-/// ก่อนหน้าจบ แล้วจึงเหลืองจนเครื่องมือในขั้นตัวเองจบหมด
-///
-/// [stillRunning] = false เมื่องานจบแล้ว (สำเร็จ/ล้มเหลว) — ไม่บังคับสถานะ
-/// "กำลังทำงาน" ให้ stage ที่ backend ไม่เคย mark
 AnalysisPipelineDisplay deriveSequentialPipelineStatuses({
   required ToolRunStatus virustotal,
   required ToolRunStatus mobsf,
@@ -255,13 +236,11 @@ AnalysisPipelineDisplay deriveSequentialPipelineStatuses({
       s == ToolRunStatus.failed ||
       s == ToolRunStatus.skipped;
 
-  // Stage 1 คือขั้นแรกของ pipeline — ไม่มีสถานะ "รอ" ให้โชว์
   final vtDisplay = stillRunning && virustotal == ToolRunStatus.waiting
       ? ToolRunStatus.running
       : virustotal;
   final stage1Done = done(vtDisplay);
 
-  // Stage 2: ฟ้าจน stage 1 จบ แล้วเหลืองจนเครื่องมือทั้งสามตัวจบกัน
   final stage2Raws = [mobsf, cape, rampartAi];
   final stage2AllDone = stage2Raws.every(done);
   final stage2Derived = deriveAnalysisStageStatus(stage2Raws);
@@ -271,14 +250,12 @@ AnalysisPipelineDisplay deriveSequentialPipelineStatuses({
           ? stage2Derived
           : ToolRunStatus.running;
 
-  // Stage 3: ฟ้าจน stage 2 จบ
   final geminiDisplay = !stage1Done || !stage2AllDone
       ? ToolRunStatus.waiting
       : stillRunning && gemini == ToolRunStatus.waiting
           ? ToolRunStatus.running
           : gemini;
 
-  // การ์ดเครื่องมือใน stage 2 โชว์สถานะจริงได้เมื่อถึงคิวของ stage ตัวเองแล้วเท่านั้น
   ToolRunStatus stage2Tool(ToolRunStatus raw) =>
       !stage1Done ? ToolRunStatus.waiting : raw;
 

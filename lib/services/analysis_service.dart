@@ -12,15 +12,6 @@ import 'package:rampart/services/network_monitor_service.dart';
 import 'package:rampart/services/offline_cache.dart';
 import 'package:rampart/services/tab_cache.dart';
 
-/// ชั้นเชื่อมต่อระบบวิเคราะห์ไฟล์ของ RAMPART
-///
-/// กฎสำคัญของ API นี้:
-/// - access token (JWT) ส่งเป็น field `token` ใน JSON body ทุก endpoint
-///   ยกเว้น upload ที่ส่งเป็น query param `?token=` และต้องใช้ upload token
-///   ที่ออกโดย generate-token (อายุ 15 นาที)
-/// - response ใช้ envelope {success, status, message, data}
-/// - ไม่ throw ออกไปให้คนเรียก จับ error แล้วคืนผลลัพธ์ที่ success = false
-///   โดยใช้ status = 0 เมื่อคำขอไปไม่ถึงเซิร์ฟเวอร์ (แนวเดียวกับ authService)
 class AnalysisService {
   static final AnalysisService _instance = AnalysisService._internal();
   factory AnalysisService() => _instance;
@@ -41,10 +32,8 @@ class AnalysisService {
   static const String _msgNetwork = 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
   static const String _msgNoSession = 'กรุณาเข้าสู่ระบบใหม่';
 
-  /// backend จำกัดไฟล์อัปโหลดไว้ 1GB
   static const int maxUploadBytes = 1024 * 1024 * 1024;
 
-  /// คำนวณ SHA-256 บน isolate แยก ไม่ block UI isolate และไม่โหลดทั้งไฟล์เข้าหน่วยความจำ
   static Future<String> computeFileSha256(File file) {
     final path = file.path;
     return Isolate.run(() async {
@@ -68,7 +57,6 @@ class AnalysisService {
     return token;
   }
 
-  /// แยก network error (ไปไม่ถึงเซิร์ฟเวอร์ -> 0) จาก error ที่เซิร์ฟเวอร์ตอบกลับ
   int _failureStatus(Object error) {
     if (error is DioException) {
       final response = error.response;
@@ -77,7 +65,6 @@ class AnalysisService {
     return 0;
   }
 
-  /// ดึงข้อความจากเซิร์ฟเวอร์ก่อน ถ้าไม่มีจึงใช้ข้อความไทยที่เตรียมไว้
   String _messageFrom(Object error, String fallback) {
     if (error is DioException) {
       final data = error.response?.data;
@@ -91,14 +78,12 @@ class AnalysisService {
     return fallback;
   }
 
-  /// คำขอไปไม่ถึงเซิร์ฟเวอร์เลย — บอก NetworkMonitorService ให้แถบออฟไลน์ขึ้นทันที
   void _reportUnreachable(Object error) {
     if (NetworkMonitorService.isUnreachable(error)) {
       NetworkMonitorService().reportUnreachable();
     }
   }
 
-  /// ขอ upload token สำหรับอัปโหลดไฟล์ (อายุ 15 นาที)
   Future<UploadTokenResult> generateUploadToken() async {
     final token = await _accessToken();
     if (token == null) {
@@ -144,10 +129,6 @@ class AnalysisService {
     }
   }
 
-  /// ตรวจว่าไฟล์นี้เคยถูกวิเคราะห์ไว้แล้วหรือยัง ก่อนส่งไบต์ใด ๆ ขึ้นเซิร์ฟเวอร์
-  ///
-  /// คืน null เมื่อ (ก) ยังไม่เคยวิเคราะห์ (cache miss) (ข) คำนวณ hash ไม่ได้
-  /// หรือ (ค) endpoint ตอบกลับผิดพลาด — ทุกกรณีผู้เรียกต้องออกอัปโหลดตามปกติ
   Future<UploadResult?> findExistingAnalysis({
     required File file,
     required String fileName,
@@ -176,8 +157,6 @@ class AnalysisService {
       final result = UploadResult.fromJson(Map<String, dynamic>.from(data));
       if (!result.success) return null;
 
-      // found = false ครอบคลุมทั้ง cache miss และสถานะ dispatching
-      // (ซึ่ง backend แนะนำให้อัปโหลดต่อ) — ทั้งคู่ต้องส่งไฟล์จริง
       if (result.found != true) return null;
       if (result.taskId == null || result.taskId!.isEmpty) return null;
       return result;
@@ -186,12 +165,6 @@ class AnalysisService {
     }
   }
 
-  /// อัปโหลดไฟล์เพื่อเริ่มวิเคราะห์
-  ///
-  /// ก่อนอัปโหลดจะเช็ค hash กับ /check-hash ก่อน ถ้าไฟล์ซ้ำกับงานที่เคย
-  /// วิเคราะห์ไว้ เซิร์ฟเวอร์จะคืน task เดิมกลับมา ไม่สร้างงานใหม่
-  ///
-  /// [onProgress] รายงานความคืบหน้าการส่งจริงเป็น byte (sent, total)
   Future<UploadResult> uploadFile({
     required File file,
     required String fileName,
@@ -268,7 +241,6 @@ class AnalysisService {
     }
   }
 
-  /// สถานะงานวิเคราะห์ (ใช้ poll จนกว่า status จะเป็น success/failed)
   Future<TaskStatusResult> getTaskStatus(String taskId) async {
     final token = await _accessToken();
     if (token == null) {
@@ -311,8 +283,6 @@ class AnalysisService {
     }
   }
 
-  /// ผลวิเคราะห์ของเครื่องมือเดียว — tool ที่รับคือ virustotal/mobsf/cape/rampartai
-  /// (rampart_ai จะถูกแปลงเป็น rampartai ให้อัตโนมัติ)
   Future<ToolReportResult> getToolReport({
     required String taskId,
     required String tool,
@@ -376,7 +346,6 @@ class AnalysisService {
     }
   }
 
-  /// อ่านสถานะงานที่เคยโหลดสำเร็จ คืน null เมื่อไม่มีของเก่าหรือของเก่าใช้ไม่ได้
   Future<TaskStatusResult?> _cachedTask(
     String scope,
     String cacheKey,
@@ -393,10 +362,6 @@ class AnalysisService {
     return result;
   }
 
-  /// ประวัติการวิเคราะห์ของผู้ใช้ (มี pagination)
-  ///
-  /// [force] = true เมื่อผู้ใช้สั่งดึงเอง (ดึงลงเพื่อรีเฟรช/ปุ่มลองใหม่) — ข้ามแคชใน
-  /// หน่วยความจำ ส่วนการกดแท็บใช้ค่าเริ่มต้น ซึ่งยิงใหม่เฉพาะตอนแคชครบ [TabCache.ttl]
   Future<AnalysisHistoryPage> getHistory({
     int page = 1,
     int limit = 10,
@@ -424,8 +389,6 @@ class AnalysisService {
       body[sortField] = sortDirection >= 0 ? 1 : -1;
     }
 
-    // แยก key ตามชุดพารามิเตอร์ของคำค้น เพื่อไม่ให้ผลของการค้นหาหนึ่งไป
-    // ทับของอีกคำค้นหนึ่งใน cache
     final scope = OfflineCache.scopeFor(token);
     final cacheKey = OfflineCache.normaliseKey([
       'analysis.history',
@@ -448,7 +411,6 @@ class AnalysisService {
         return cached;
       }
 
-      // รู้แน่อยู่แล้วว่าเน็ตไม่ขึ้น — ข้ามการยิงที่จะรอจน timeout แล้วหยิบของเก่ามาใช้เลย
       if (!NetworkMonitorService().isOnline.value) {
         final stale = await _cachedHistory(scope, cacheKey);
         if (stale != null) return stale;
@@ -483,7 +445,6 @@ class AnalysisService {
     }
   }
 
-  /// ประวัติชุดเดิมที่เคยโหลดสำเร็จและบันทึกไว้ในดิสก์ — คืน null ถ้าไม่มีหรือใช้ไม่ได้
   Future<AnalysisHistoryPage?> _cachedHistory(
     String scope,
     String cacheKey,
@@ -499,7 +460,6 @@ class AnalysisService {
     return result;
   }
 
-  /// เปลี่ยน public/private ของรายงาน
   Future<Map<String, dynamic>> updatePrivacy({
     required String taskId,
     required bool privacy,
@@ -530,7 +490,6 @@ class AnalysisService {
     }
   }
 
-  /// URL สำหรับดาวน์โหลดรายงานรายเครื่องมือ (ฝั่ง backend รับ token ทาง query ได้)
   Future<String> buildDownloadUrl({
     required String tool,
     required String md5,
@@ -545,7 +504,6 @@ class AnalysisService {
   }
 }
 
-/// รับ digest ที่คำนวณเสร็จแล้ว (เรียกครั้งเดียวตอนปิด sink)
 class _DigestCollector implements Sink<crypto.Digest> {
   _DigestCollector(this.onDigest);
 

@@ -16,16 +16,12 @@ import '../widgets/tool_reports/cape_report.dart';
 class ToolReportScreen extends StatefulWidget {
   const ToolReportScreen({super.key});
 
-  /// ดาวน์โหลด JSON ได้เฉพาะสามเครื่องมือที่รายงานถูกเก็บแยกเป็นไฟล์
-  /// `.json` ต่อหนึ่งเครื่องมือ ส่วน `rampart_ai` / `gemini` ไม่มีไฟล์ของตัวเอง
-  /// (Gemini ถูกรวมอยู่ในรายงานหลักอยู่แล้ว) จึงไม่ต้องมีปุ่มดาวน์โหลด
   static const Set<String> downloadableTools = {
     'virustotal',
     'mobsf',
     'cape',
   };
 
-  /// เครื่องมือนี้มีไฟล์ JSON ให้ดาวน์โหลดหรือไม่
   static bool supportsJsonDownload(String tool) =>
       downloadableTools.contains(AnalysisReport.toolRouteKey(tool));
 
@@ -46,8 +42,6 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
   String? _error;
   bool _downloading = false;
 
-  /// ใช้ค่าที่กล่องความคืบหน้าฟังอยู่ — กล่อง rebuild เฉพาะตัวเอง
-  /// ไม่ดึงทั้งหน้าจอมาวาดใหม่ทุกครั้งที่เข้ามีข้อมูล (ดู R3 ใน AGENTS.md)
   final ValueNotifier<DownloadProgress?> _downloadProgress =
       ValueNotifier<DownloadProgress?>(null);
 
@@ -106,8 +100,6 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
     setState(() => _downloading = true);
     _downloadProgress.value = DownloadProgress.zero;
 
-    // กล่องความคืบหน้าปิดเองไม่ได้ (barrierDismissible: false + PopScope) แต่ต้องการ
-    // flag กันเผื่อว่ามันถูกปิดไปทางอื่นแล้ว จะได้ไม่ไป pop หน้าจอหลักทั้งที่ตั้งใจปิดกล่อง
     var progressOpen = true;
     unawaited(
       showDialog<void>(
@@ -136,8 +128,6 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
       );
     }
 
-    // หน้าจอถูกปิดไประหว่างดาวน์โหลด — กล่องความคืบหน้าถูกปิดไปพร้อม route แล้ว
-    // และไม่ต้อง setState บน widget ที่ตายแล้ว
     if (!mounted) return;
     setState(() => _downloading = false);
 

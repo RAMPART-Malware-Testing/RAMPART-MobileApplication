@@ -56,8 +56,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return hasUppercase && hasLowercase && hasDigit && hasSpecialCharacters;
   }
 
-  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
-  /// (เหมือนฝั่งเว็บ — site/secret key ฝังในแอปตามที่ตกลง ไม่ได้ส่งต่อไปที่ API)
   Future<void> _openRecaptcha() async {
     final token = await RecaptchaSheet.show(context);
     if (!mounted || token == null || token.isEmpty) return;

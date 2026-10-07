@@ -41,8 +41,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
-  /// (เหมือนหน้า login/register — site/secret key ฝังในแอป ไม่ได้ส่งต่อไปที่ API)
   Future<void> _openRecaptcha() async {
     final token = await RecaptchaSheet.show(context);
     if (!mounted || token == null || token.isEmpty) return;

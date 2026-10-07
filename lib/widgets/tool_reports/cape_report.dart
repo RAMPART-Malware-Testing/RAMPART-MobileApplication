@@ -433,7 +433,6 @@ class _CapeReportWidgetState extends State<CapeReportWidget> {
 
     if (confirmed != true) return;
 
-    // สร้าง JSON หลังผู้ใช้ยืนยัน เพื่อไม่ให้ block UI
     final encoder = const JsonEncoder.withIndent('  ');
     final pretty = encoder.convert(widget.report.rawJson);
 

@@ -1,7 +1,5 @@
-/// โมเดลข้อมูลโปรไฟล์ผู้ใช้และประวัติการใช้งาน
 library;
 
-// ---------- helper สำหรับ parse แบบทนทาน ----------
 
 String? _asString(dynamic v) {
   if (v == null) return null;
@@ -15,7 +13,6 @@ DateTime? _asDate(dynamic v) {
   return DateTime.tryParse(s.trim());
 }
 
-// ---------- โปรไฟล์ผู้ใช้ ----------
 
 class RampartProfile {
   final String uid;
@@ -91,7 +88,6 @@ class ProfileResult {
       ProfileResult(success: false, message: message, status: status);
 }
 
-// ---------- ประวัติการเข้าสู่ระบบ ----------
 
 class LoginHistoryEntry {
   final String id;
@@ -158,7 +154,6 @@ class LoginHistoryResult {
       LoginHistoryResult(success: false, message: message, status: status);
 }
 
-// ---------- ประวัติการดาวน์โหลด ----------
 
 class DownloadHistoryEntry {
   final String id;

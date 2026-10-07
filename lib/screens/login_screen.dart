@@ -36,8 +36,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
 
-  /// ข้ามเมื่อผู้ใช้ปิดสวิตช์แจ้งเตือนไว้ ไม่เช่นนั้นการล็อกอินจะลงทะเบียนอุปกรณ์
-  /// กลับเข้าไปและลบล้างการตั้งค่านั้น
   Future<void> _registerFcmToken() async {
     if (!await notificationsAllowed()) return;
     final token = FcmService().deviceToken.value;
@@ -46,8 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// เปิด WebView ให้ผู้ใช้ยืนยันกับ Google แล้วตรวจ token กับ Google ในเครื่องแอปเอง
-  /// (เหมือนฝั่งเว็บ — site/secret key ฝังในแอปตามที่ตกลง ไม่ได้ส่งต่อไปที่ API)
   Future<void> _openRecaptcha() async {
     final token = await RecaptchaSheet.show(context);
     if (!mounted || token == null || token.isEmpty) return;
@@ -89,7 +85,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       Get.offAllNamed('/confirm-otp', arguments: {"type": "login"});
     } else {
-      // ตรวจว่าบัญชีถูกระงับ
       if (SessionGuard.isBanned(res)) {
         await SessionGuard.handleBanned();
         return;
@@ -123,8 +118,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    // Firebase อาจเริ่มช้ากว่าหน้านี้ (หรือเริ่มหลังต่อเน็ตได้) จึงต้องฟังค่า token
-    // ไม่ใช่อ่านครั้งเดียวตอนเปิดหน้า ไม่งั้นจะไม่มีโอกาสลงทะเบียนอีก
     _tokenWorker = ever<String?>(FcmService().deviceToken, (_) {
       _registerFcmToken();
     });

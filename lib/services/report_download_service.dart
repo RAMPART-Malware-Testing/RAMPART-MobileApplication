@@ -7,10 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import '../services/analysis_service.dart';
 import '../services/profile_service.dart';
 
-/// ความคืบหน้าการดาวน์โหลด
-///
-/// [total] เป็น -1 เมื่อเซิร์ฟเวอร์ไม่ส่ง `Content-Length` มา — ในกรณีนั้น
-/// [percent] เป็น null และ UI ต้องแสดงแถบแบบไม่รู้ขนาดแทนตัวเลข
 class DownloadProgress {
   const DownloadProgress({required this.received, required this.total});
 
@@ -25,7 +21,6 @@ class DownloadProgress {
   int? get percent =>
       isTotalKnown ? (received * 100 ~/ total).clamp(0, 100) : null;
 
-  /// ขนาดไบต์เป็น KB/MB — โครงสร้างเดียวกับหน้าอื่น
   String get receivedLabel => formatBytes(received);
   String? get totalLabel => isTotalKnown ? formatBytes(total) : null;
 }
@@ -40,7 +35,6 @@ String formatBytes(int? bytes) {
   return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
 }
 
-/// ผลการดาวน์โหลด
 class DownloadOutcome {
   const DownloadOutcome({
     required this.success,
@@ -57,7 +51,6 @@ class DownloadOutcome {
   final String message;
 }
 
-/// Service สำหรับดาวน์โหลดรายงาน JSON ของแต่ละเครื่องมือ
 class ReportDownloadService {
   static final ReportDownloadService _instance =
       ReportDownloadService._internal();
@@ -76,10 +69,6 @@ class ReportDownloadService {
 
   late final Dio _http;
 
-  /// ดาวน์โหลดรายงาน JSON แล้วบันทึกลงเครื่อง + แจ้ง backend ว่าดาวน์โหลดแล้ว
-  ///
-  /// [onProgress] เรียกทุกครั้งที่รับข้อมูลเข้ามา เพื่อให้ UI รายงานเปอร์เซ็นต์ได้
-  /// ถ้าเซิร์ฟเวอร์ไม่บอกขนาดไฟล์ [DownloadProgress.percent] จะเป็น null
   Future<DownloadOutcome> download({
     required String tool,
     required String md5,
@@ -87,7 +76,6 @@ class ReportDownloadService {
     void Function(DownloadProgress progress)? onProgress,
   }) async {
     try {
-      // สร้าง URL ด้วย helper ที่เติม token ให้
       final url = await AnalysisService().buildDownloadUrl(
         tool: tool,
         md5: md5,
@@ -121,12 +109,10 @@ class ReportDownloadService {
         );
       }
 
-      // หาที่เก็บไฟล์ — ลอง external ก่อน (accessible จาก file manager)
       Directory? dir;
       try {
         dir = await getExternalStorageDirectory();
       } catch (_) {
-        // ถ้าไม่ได้ fallback เป็น app documents
       }
       dir ??= await getApplicationDocumentsDirectory();
 
@@ -135,7 +121,6 @@ class ReportDownloadService {
         await targetDir.create(recursive: true);
       }
 
-      // สร้างชื่อไฟล์ แล้ว sanitise
       final baseName = fileName?.isNotEmpty == true
           ? '$tool-$fileName-$md5.json'
           : '$tool-$md5.json';
@@ -144,7 +129,6 @@ class ReportDownloadService {
 
       await file.writeAsBytes(bytes);
 
-      // แจ้ง backend ว่าดาวน์โหลดแล้ว (fire-and-forget, ไม่ await)
       _registerDownload(fileName: fileName, tool: tool, md5: md5);
 
       return DownloadOutcome(
@@ -177,11 +161,8 @@ class ReportDownloadService {
     }
   }
 
-  /// ตัดอักขระที่ผิดกฎ + จำกัดความยาว
   String _sanitiseFileName(String name) {
-    // ตัด path separator และอักขระที่ห้ามบน Android/iOS
     var clean = name.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-    // จำกัดความยาวไว้ 200 ตัวอักษร
     if (clean.length > 200) {
       final ext = clean.endsWith('.json') ? '.json' : '';
       clean = clean.substring(0, 200 - ext.length) + ext;
@@ -189,8 +170,6 @@ class ReportDownloadService {
     return clean;
   }
 
-  /// แจ้ง backend ว่าดาวน์โหลดแล้ว — fire-and-forget ห้าม await
-  /// ประวัติการดาวน์โหลดเป็นข้อมูลประกอบ ไม่ควรทำให้การดาวน์โหลดที่สำเร็จแล้วดูเหมือนล้มเหลว
   void _registerDownload({
     String? fileName,
     required String tool,
