@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
+import '../services/notification_service.dart';
 import '../services/tab_refresh_bus.dart';
 import '../theme/app_theme.dart';
 import '../widgets/offline_banner.dart';
@@ -10,13 +12,15 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  const MainScreen({Key? key}) : super(key: key);
+  const MainScreen({super.key});
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
+  static const int reportsTab = 2;
+
   int _currentIndex = 0;
 
   final List<Widget> _screens = const [
@@ -26,6 +30,11 @@ class _MainScreenState extends State<MainScreen> {
     PublicReportsScreen(asTab: true),
     SettingsScreen(),
   ];
+
+  NotificationService get _notifications =>
+      Get.isRegistered<NotificationService>()
+      ? Get.find<NotificationService>()
+      : NotificationService();
 
   @override
   void initState() {
@@ -45,11 +54,19 @@ class _MainScreenState extends State<MainScreen> {
     setState(() => _currentIndex = TabRefreshBus.currentIndex);
   }
 
+  void _selectTab(int index) {
+    setState(() => _currentIndex = index);
+    TabRefreshBus.select(index);
+    if (index == reportsTab) _notifications.clear();
+  }
+
   Color get _cardColor => Theme.of(context).cardColor;
   Color get _cyanColor =>
       Theme.of(context).extension<CustomColors>()!.cyanColor;
   Color get _hintColor =>
       Theme.of(context).extension<CustomColors>()!.hintColor;
+  Color get _failedColor =>
+      Theme.of(context).extension<CustomColors>()!.failedColor;
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +106,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Icons.description_outlined,
                   activeIcon: Icons.description,
                   label: 'Reports',
+                  badgeColor: _failedColor,
                 ),
                 _buildNavItem(
                   index: 3,
@@ -115,28 +133,25 @@ class _MainScreenState extends State<MainScreen> {
     required IconData icon,
     required IconData activeIcon,
     required String label,
+    Color? badgeColor,
   }) {
     final isActive = _currentIndex == index;
+    final color = isActive ? _cyanColor : _hintColor;
 
     return Expanded(
       child: InkWell(
-        onTap: () {
-          setState(() {
-            _currentIndex = index;
-          });
-          TabRefreshBus.select(index);
-        },
+        onTap: () => _selectTab(index),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isActive
-                ? _cyanColor.withOpacity(0.15)
+                ? _cyanColor.withValues(alpha: 0.15)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isActive
-                  ? _cyanColor.withOpacity(0.3)
+                  ? _cyanColor.withValues(alpha: 0.3)
                   : Colors.transparent,
               width: 1.5,
             ),
@@ -144,18 +159,50 @@ class _MainScreenState extends State<MainScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                isActive ? activeIcon : icon,
-                color: isActive ? _cyanColor : _hintColor,
-                size: 26,
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(isActive ? activeIcon : icon, color: color, size: 26),
+                  if (index == reportsTab)
+                    Positioned(
+                      top: -7,
+                      right: -9,
+                      child: Obx(() {
+                        final count = _notifications.count;
+                        if (count <= 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          constraints: const BoxConstraints(
+                            minWidth: 15,
+                            minHeight: 15,
+                          ),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: badgeColor ?? _failedColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            count > 99 ? '99+' : '$count',
+                            style: const TextStyle(
+                              fontFamily: 'Kanit',
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
                 label,
-                style: TextStyle(fontFamily: 'Kanit', 
+                style: TextStyle(
+                  fontFamily: 'Kanit',
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? _cyanColor : _hintColor,
+                  color: color,
                 ),
               ),
             ],

@@ -65,6 +65,7 @@ class AppTheme {
           hintColor: Colors.blueGrey.shade700,
           cyanColor: cyanAccent,
           blueColor: blueAccent,
+          failedColor: const Color(0xFFB00020),
         ),
       },
     );
@@ -104,6 +105,7 @@ class AppTheme {
           hintColor: Colors.blueGrey.shade300,
           cyanColor: cyanAccent,
           blueColor: blueAccent,
+          failedColor: const Color(0xFFCF6679),
         ),
       },
     );
@@ -118,6 +120,7 @@ class CustomColors extends ThemeExtension<CustomColors> {
     required this.hintColor,
     required this.cyanColor,
     required this.blueColor,
+    required this.failedColor,
   });
 
   final Color backgroundColor;
@@ -125,6 +128,7 @@ class CustomColors extends ThemeExtension<CustomColors> {
   final Color hintColor;
   final Color cyanColor;
   final Color blueColor;
+  final Color failedColor;
 
   @override
   ThemeExtension<CustomColors> copyWith({
@@ -133,6 +137,7 @@ class CustomColors extends ThemeExtension<CustomColors> {
     Color? hintColor,
     Color? cyanColor,
     Color? blueColor,
+    Color? failedColor,
   }) {
     return CustomColors(
       backgroundColor: backgroundColor ?? this.backgroundColor,
@@ -140,6 +145,7 @@ class CustomColors extends ThemeExtension<CustomColors> {
       hintColor: hintColor ?? this.hintColor,
       cyanColor: cyanColor ?? this.cyanColor,
       blueColor: blueColor ?? this.blueColor,
+      failedColor: failedColor ?? this.failedColor,
     );
   }
 
@@ -157,6 +163,7 @@ class CustomColors extends ThemeExtension<CustomColors> {
       hintColor: Color.lerp(hintColor, other.hintColor, t)!,
       cyanColor: Color.lerp(cyanColor, other.cyanColor, t)!,
       blueColor: Color.lerp(blueColor, other.blueColor, t)!,
+      failedColor: Color.lerp(failedColor, other.failedColor, t)!,
     );
   }
 }

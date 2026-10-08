@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:rampart/services/authService.dart';
+import 'package:rampart/services/notification_service.dart';
 
 const String _notifEnabledKey = 'notif_enabled';
 
@@ -128,7 +129,11 @@ Future<void> _showLocalNotification({
   required String body,
   String? payload,
   int id = 0,
+  bool incrementCount = false,
 }) async {
+  if (incrementCount && Get.isRegistered<NotificationService>()) {
+    Get.find<NotificationService>().inc();
+  }
   const androidDetails = AndroidNotificationDetails(
     'rampart_channel',
     'RAMPART Notifications',
@@ -186,6 +191,16 @@ class FcmService {
       await Firebase.initializeApp();
     } catch (e) {
       print('[FCM] Firebase init ไม่สำเร็จ: $e');
+      // Fallback: แสดง notification ท้องถิมเมื่อ FCM ล้มเหลื่อน
+      await _ensureNotificationsInit();
+      await _showLocalNotification(
+        id: 0,
+        title: 'ระบบแจ้งเตือนยังไม่พร้อมใช้งาน',
+        body:
+            'ไม่สามารถเชื่อมต่อบริการแจ้งเตือนของ RAMPART ได้ '
+            'กรุณาตรวจสอบอินเทอร์เน็ตแล้วเปิดแอปใหม่',
+        incrementCount: true,
+      );
       return false;
     }
 
@@ -268,6 +283,7 @@ class FcmService {
       title: message.notification!.title ?? 'RAMPART',
       body: message.notification!.body ?? '',
       payload: _encodePayload(message),
+      incrementCount: true,
     );
   }
 

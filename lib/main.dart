@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart' show Intl;
 import 'package:rampart/services/fcm_service.dart';
 import 'package:rampart/services/network_monitor_service.dart';
+import 'package:rampart/services/notification_service.dart';
 import 'package:rampart/screens/PINSetupScreen.dart';
 import 'package:rampart/screens/PinVerifyScreen.dart';
 import 'package:rampart/screens/login_screen.dart';
@@ -63,6 +64,7 @@ class _BootstrapState extends State<_Bootstrap> {
     }
     if (!mounted) return;
     Get.put(pinService);
+    Get.put(NotificationService());
     Get.put(monitor);
     monitor.onReconnect = _initPush;
 

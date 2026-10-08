@@ -597,7 +597,8 @@ Future<void> _toggleNotifications(bool value) async {
   Widget _buildLogoutDialog() {
     final customColors = Theme.of(context).extension<CustomColors>()!;
     return AlertDialog(
-      backgroundColor: customColors.cardBackground,
+      backgroundColor: customColors.backgroundColor,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: const Row(
         children: [
