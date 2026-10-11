@@ -20,6 +20,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   static const int reportsTab = 2;
+  static const int publicTab = 3;
 
   int _currentIndex = 0;
 
@@ -40,6 +41,9 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     TabRefreshBus.addListener(_onTabBusTick);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notifications.syncFromServer();
+    });
   }
 
   @override
@@ -57,7 +61,11 @@ class _MainScreenState extends State<MainScreen> {
   void _selectTab(int index) {
     setState(() => _currentIndex = index);
     TabRefreshBus.select(index);
-    if (index == reportsTab) _notifications.clear();
+    if (index == reportsTab) {
+      _notifications.clear();
+    } else if (index == publicTab) {
+      _notifications.clearPublic();
+    }
   }
 
   Color get _cardColor => Theme.of(context).cardColor;
@@ -113,6 +121,7 @@ class _MainScreenState extends State<MainScreen> {
                   icon: Icons.public_outlined,
                   activeIcon: Icons.public,
                   label: 'Public',
+                  badgeColor: _cyanColor,
                 ),
                 _buildNavItem(
                   index: 4,
@@ -163,12 +172,14 @@ class _MainScreenState extends State<MainScreen> {
                 clipBehavior: Clip.none,
                 children: [
                   Icon(isActive ? activeIcon : icon, color: color, size: 26),
-                  if (index == reportsTab)
+                  if (index == reportsTab || index == publicTab)
                     Positioned(
                       top: -7,
                       right: -9,
                       child: Obx(() {
-                        final count = _notifications.count;
+                        final count = index == reportsTab
+                            ? _notifications.count
+                            : _notifications.publicCount;
                         if (count <= 0) return const SizedBox.shrink();
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4),

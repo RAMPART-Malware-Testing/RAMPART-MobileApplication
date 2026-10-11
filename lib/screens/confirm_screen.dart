@@ -288,7 +288,12 @@ class _ConfirmScreenState extends State<ConfirmScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Get.offAllNamed('/login');
+      },
+      child: Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -325,6 +330,7 @@ class _ConfirmScreenState extends State<ConfirmScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }

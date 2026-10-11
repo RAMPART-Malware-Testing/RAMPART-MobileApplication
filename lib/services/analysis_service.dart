@@ -476,7 +476,13 @@ class AnalysisService {
       );
 
       final data = res.data;
-      if (data is Map) return Map<String, dynamic>.from(data);
+      if (data is Map) {
+        final result = Map<String, dynamic>.from(data);
+        if (result['success'] == true) {
+          await _invalidatePrivacyCaches(token, taskId);
+        }
+        return result;
+      }
       return {'success': false, 'status': 0, 'message': _msgNetwork};
     } catch (e) {
       final status = _failureStatus(e);
@@ -488,6 +494,18 @@ class AnalysisService {
             : _messageFrom(e, 'ไม่สามารถอัปเดตความเป็นส่วนตัวได้'),
       };
     }
+  }
+
+  Future<void> _invalidatePrivacyCaches(String token, String taskId) async {
+    final scope = OfflineCache.scopeFor(token);
+    TabCache.instance.removePrefix('$scope|analysis.history');
+    TabCache.instance.removePrefix('$scope|dashboard.');
+    TabCache.instance.remove('$scope|analysis.task.$taskId');
+    await Future.wait([
+      OfflineCache.instance.removePrefix(scope, 'analysis.history'),
+      OfflineCache.instance.removePrefix(scope, 'dashboard.'),
+      OfflineCache.instance.remove(scope, 'analysis.task.$taskId'),
+    ]);
   }
 
   Future<String> buildDownloadUrl({

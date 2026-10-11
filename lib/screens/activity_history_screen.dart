@@ -20,6 +20,7 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
 
   List<LoginHistoryEntry> _loginEntries = [];
   List<DownloadHistoryEntry> _downloadEntries = [];
+  List<PasswordHistoryEntry> _passwordEntries = [];
 
   @override
   void initState() {
@@ -39,6 +40,20 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       if (result.success) {
         setState(() {
           _loginEntries = result.entries;
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _error = result.message;
+          _loading = false;
+        });
+      }
+    } else if (_mode == 'password') {
+      final result = await ProfileService.instance.passwordHistory();
+      if (!mounted) return;
+      if (result.success) {
+        setState(() {
+          _passwordEntries = result.entries;
           _loading = false;
         });
       } else {
@@ -113,7 +128,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildHeader(CustomColors customColors) {
-    final title = _mode == 'login' ? 'ประวัติการเข้าสู่ระบบ' : 'ประวัติการดาวน์โหลด';
+    final title = _mode == 'login'
+        ? 'ประวัติการเข้าสู่ระบบ'
+        : _mode == 'password'
+            ? 'ประวัติการเปลี่ยนรหัสผ่าน'
+            : 'ประวัติการดาวน์โหลด';
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -178,7 +197,11 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
   }
 
   Widget _buildContent(CustomColors customColors) {
-    final isEmpty = _mode == 'login' ? _loginEntries.isEmpty : _downloadEntries.isEmpty;
+    final isEmpty = _mode == 'login'
+        ? _loginEntries.isEmpty
+        : _mode == 'password'
+            ? _passwordEntries.isEmpty
+            : _downloadEntries.isEmpty;
 
     if (isEmpty) {
       return _buildEmptyState(customColors);
@@ -188,14 +211,18 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
       onRefresh: _loadHistory,
       child: _mode == 'login'
           ? _buildLoginList(customColors)
-          : _buildDownloadList(customColors),
+          : _mode == 'password'
+              ? _buildPasswordList(customColors)
+              : _buildDownloadList(customColors),
     );
   }
 
   Widget _buildEmptyState(CustomColors customColors) {
     final message = _mode == 'login'
         ? 'ยังไม่มีประวัติการเข้าสู่ระบบ'
-        : 'ยังไม่มีประวัติการดาวน์โหลด';
+        : _mode == 'password'
+            ? 'ยังไม่มีประวัติการเปลี่ยนรหัสผ่าน'
+            : 'ยังไม่มีประวัติการดาวน์โหลด';
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -357,6 +384,55 @@ class _ActivityHistoryScreenState extends State<ActivityHistoryScreen> {
                   color: customColors.hintColor,
                 ),
               ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPasswordList(CustomColors customColors) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _passwordEntries.length,
+      itemBuilder: (context, index) {
+        final entry = _passwordEntries[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: customColors.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.lock_reset, size: 16, color: customColors.cyanColor),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'เปลี่ยนรหัสผ่านสำเร็จ',
+                      style: TextStyle(
+                        fontFamily: 'Kanit',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow(Icons.schedule, _formatDate(entry.createdAt), customColors),
+              if (entry.ip != null && entry.ip!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                _buildInfoRow(Icons.location_on_outlined, entry.ip!, customColors),
+              ],
+              const SizedBox(height: 4),
+              _buildInfoRow(Icons.devices, _truncateUserAgent(entry.userAgent), customColors),
             ],
           ),
         );

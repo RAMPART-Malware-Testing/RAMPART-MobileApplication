@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -100,7 +101,15 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
     setState(() => _downloading = true);
     _downloadProgress.value = DownloadProgress.zero;
 
+    final cancelToken = CancelToken();
     var progressOpen = true;
+    void cancelDownload() {
+      if (!cancelToken.isCancelled) cancelToken.cancel();
+      if (progressOpen) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+
     unawaited(
       showDialog<void>(
         context: context,
@@ -108,6 +117,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
         builder: (_) => DownloadProgressDialog(
           title: 'กำลังดาวน์โหลดรายงาน ${analysisToolLabel(_tool)}',
           progress: _downloadProgress,
+          onCancel: cancelDownload,
         ),
       ).whenComplete(() => progressOpen = false),
     );
@@ -118,6 +128,7 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
         tool: _tool,
         md5: md5,
         fileName: _fileName,
+        cancelToken: cancelToken,
         onProgress: (value) => _downloadProgress.value = value,
       );
     } catch (e) {
@@ -134,6 +145,8 @@ class _ToolReportScreenState extends State<ToolReportScreen> {
     if (progressOpen) {
       Navigator.of(context, rootNavigator: true).pop();
     }
+
+    if (outcome.cancelled) return;
 
     await showDialog<void>(
       context: context,

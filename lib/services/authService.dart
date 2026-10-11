@@ -260,7 +260,10 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>> changePassword(String newPassword) async {
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
     final token = await _storage.read(key: 'session_token');
     if (token == null || token.isEmpty || token == 'null') {
       return {
@@ -272,8 +275,12 @@ class AuthService {
 
     try {
       final res = await _http.post(
-        '/api/auth/reset-passwd',
-        data: {'token': token, 'newPasswd': newPassword},
+        '/api/profile/change-password',
+        data: {
+          'token': token,
+          'currentPasswd': currentPassword,
+          'newPasswd': newPassword,
+        },
       );
       if (res.data is Map) return Map<String, dynamic>.from(res.data as Map);
       return _errorResponse;

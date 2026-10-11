@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../models/analysis.dart';
 import '../services/authService.dart';
 import '../services/analysis_service.dart';
+import '../services/tab_refresh_bus.dart';
 import '../widgets/analysis_components.dart';
 
 class AnalysisResultScreen extends StatefulWidget {
@@ -208,9 +209,44 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     );
     if (!mounted) return;
     setState(() => _privacySaving = false);
-    if (result['success'] != true) {
-      setState(() => _isPrivate = previous);
+
+    if (result['success'] == true) {
+      TabRefreshBus.requestRefresh(
+        {TabRefreshBus.reportsTab, TabRefreshBus.publicTab},
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isPrivate ? 'ตั้งรายงานเป็นส่วนตัวแล้ว' : 'เปิดรายงานเป็นสาธารณะแล้ว',
+            style: const TextStyle(
+              fontFamily: 'Kanit',
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
     }
+
+    setState(() => _isPrivate = previous);
+    final message = result['message']?.toString() ?? '';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message.isNotEmpty ? message : 'อัปเดตความเป็นส่วนตัวไม่สำเร็จ',
+          style: const TextStyle(
+            fontFamily: 'Kanit',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   static Map<String, dynamic>? _map(dynamic value) {
@@ -688,29 +724,33 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
   Widget _privacyChoice(String label, bool selected) {
     return Padding(
       padding: const EdgeInsets.only(left: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: () => _setPrivacy(label == 'ส่วนตัว'),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-          decoration: BoxDecoration(
-            color: selected
-                ? (label == 'ส่วนตัว'
-                      ? AnalysisColors.purple
-                      : AnalysisColors.blue)
-                : AnalysisColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: selected ? Colors.transparent : AnalysisColors.border,
+      child: Semantics(
+        selected: selected,
+        label: selected ? '$label (เลือกอยู่)' : label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => _setPrivacy(label == 'ส่วนตัว'),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+            decoration: BoxDecoration(
+              color: selected
+                  ? (label == 'ส่วนตัว'
+                        ? AnalysisColors.purple
+                        : AnalysisColors.blue)
+                  : AnalysisColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected ? Colors.transparent : AnalysisColors.border,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Kanit',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : AnalysisColors.textSecondary,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Kanit',
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : AnalysisColors.textSecondary,
+              ),
             ),
           ),
         ),

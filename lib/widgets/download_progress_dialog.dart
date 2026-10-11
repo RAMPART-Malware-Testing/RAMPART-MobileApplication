@@ -9,15 +9,20 @@ class DownloadProgressDialog extends StatelessWidget {
     super.key,
     required this.title,
     required this.progress,
+    this.onCancel,
   });
 
   final String title;
   final ValueListenable<DownloadProgress?> progress;
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) onCancel?.call();
+      },
       child: AlertDialog(
         backgroundColor: AnalysisColors.surfaceElevated,
         shape: RoundedRectangleBorder(
@@ -69,6 +74,19 @@ class DownloadProgressDialog extends StatelessWidget {
             );
           },
         ),
+        actions: [
+          if (onCancel != null)
+            TextButton(
+              onPressed: onCancel,
+              style: TextButton.styleFrom(
+                foregroundColor: AnalysisColors.textSecondary,
+              ),
+              child: const Text(
+                'ยกเลิก',
+                style: TextStyle(fontFamily: 'Kanit'),
+              ),
+            ),
+        ],
       ),
     );
   }

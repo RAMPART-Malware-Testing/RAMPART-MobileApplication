@@ -30,6 +30,12 @@ class TabCache {
     if (current == null || at.isAfter(current)) lastSyncedAt.value = at;
   }
 
+  void remove(String key) => _entries.remove(key);
+
+  void removePrefix(String prefix) {
+    _entries.removeWhere((key, _) => key.startsWith(prefix));
+  }
+
   void clear() {
     _entries.clear();
     lastSyncedAt.value = null;

@@ -68,6 +68,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     TabRefreshBus.addListener(_onTabSelected);
+    TabRefreshBus.addRefreshListener(_onRefreshRequested);
     _autoRefresh = TabAutoRefresh(
       tabIndex: TabRefreshBus.reportsTab,
       onRefresh: _refreshFromTimer,
@@ -79,6 +80,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   @override
   void dispose() {
     TabRefreshBus.removeListener(_onTabSelected);
+    TabRefreshBus.removeRefreshListener(_onRefreshRequested);
     _autoRefresh.dispose();
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
@@ -111,6 +113,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void _refreshFromTimer() {
     if (_loading || _loadingMore || _refreshing) return;
     _loadFirstPage(silent: true);
+  }
+
+  void _onRefreshRequested() {
+    if (!TabRefreshBus.consumeRefreshRequest(TabRefreshBus.reportsTab)) return;
+    _refreshFromTimer();
   }
 
   Future<AnalysisHistoryPage> _fetch(int page, {bool force = false}) {

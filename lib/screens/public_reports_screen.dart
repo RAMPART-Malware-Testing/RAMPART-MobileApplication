@@ -107,6 +107,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
     }
 
     TabRefreshBus.addListener(_onTabSelected);
+    TabRefreshBus.addRefreshListener(_onRefreshRequested);
     _autoRefresh = TabAutoRefresh(
       tabIndex: TabRefreshBus.publicTab,
       onRefresh: _refreshFromTimer,
@@ -118,6 +119,7 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
   @override
   void dispose() {
     TabRefreshBus.removeListener(_onTabSelected);
+    TabRefreshBus.removeRefreshListener(_onRefreshRequested);
     _autoRefresh?.dispose();
     _searchDebounce?.cancel();
     _scrollController.removeListener(_onScroll);
@@ -140,6 +142,11 @@ class _PublicReportsScreenState extends State<PublicReportsScreen> {
   void _refreshFromTimer() {
     if (_fetching || _loadingMore || _refreshing) return;
     _loadFirstPage(silent: true);
+  }
+
+  void _onRefreshRequested() {
+    if (!TabRefreshBus.consumeRefreshRequest(TabRefreshBus.publicTab)) return;
+    _refreshFromTimer();
   }
 
   void _onScroll() {

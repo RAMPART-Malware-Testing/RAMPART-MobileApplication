@@ -98,6 +98,31 @@ class OfflineCache {
     }
   }
 
+  Future<void> removePrefix(String scope, String prefix) async {
+    if (scope.isEmpty || prefix.isEmpty) return;
+    try {
+      final safeScope =
+          scope.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final dir = Directory(
+        '${(await _dir()).path}${Platform.pathSeparator}$safeScope',
+      );
+      if (!await dir.exists()) return;
+      final readable = prefix.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final short = readable.length > 48 ? readable.substring(0, 48) : readable;
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = entity.path.split(Platform.pathSeparator).last;
+        if (name.startsWith(short)) {
+          try {
+            await entity.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('[cache] ลบ $prefix ไม่สำเร็จ: $e');
+    }
+  }
+
   Future<void> clearAll() async {
     try {
       _root = null;

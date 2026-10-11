@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:rampart/models/profile.dart';
 import 'package:rampart/services/authService.dart';
 import 'package:rampart/services/fcm_service.dart';
+import 'package:rampart/services/notification_service.dart';
 import 'package:rampart/services/profile_service.dart';
 import 'package:rampart/services/tab_refresh_bus.dart';
 import 'package:rampart/theme/app_theme.dart';
@@ -110,6 +111,9 @@ Future<void> _toggleNotifications(bool value) async {
       setState(() => _loggingOut = true);
       await AuthService().unregisterFcmToken();
       await AuthService().clearAuthData();
+      if (Get.isRegistered<NotificationService>()) {
+        await Get.find<NotificationService>().reset();
+      }
       if (!mounted) return;
       Get.offAllNamed('/login');
     }
@@ -375,6 +379,14 @@ Future<void> _toggleNotifications(bool value) async {
           subtitle: 'ดูรายการไฟล์ที่ดาวน์โหลด',
           trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
           onTap: () => Get.toNamed('/activity-history', arguments: 'download'),
+        ),
+        const SizedBox(height: 12),
+        _buildSettingCard(
+          icon: Icons.password_outlined,
+          title: 'ประวัติการเปลี่ยนรหัสผ่าน',
+          subtitle: 'ดูรายการเปลี่ยนรหัสผ่านล่าสุด',
+          trailing: Icon(Icons.chevron_right, color: customColors.hintColor),
+          onTap: () => Get.toNamed('/activity-history', arguments: 'password'),
         ),
         const SizedBox(height: 12),
         _buildSettingCard(

@@ -339,6 +339,77 @@ class ProfileService {
     }
   }
 
+  Future<PasswordHistoryResult> passwordHistory() async {
+    final token = await _accessToken();
+    if (token == null) {
+      return PasswordHistoryResult.failure(_msgNoSession, status: 401);
+    }
+
+    try {
+      final res = await _http.post(
+        '/api/profile/password-history',
+        data: {'token': token},
+      );
+
+      final data = res.data;
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        if (SessionGuard.isBanned(map)) {
+          await SessionGuard.handleBanned();
+          return PasswordHistoryResult.failure('บัญชีของคุณถูกระงับ', status: 403);
+        }
+        return PasswordHistoryResult.fromJson(map);
+      }
+      return PasswordHistoryResult.failure(_msgNetwork);
+    } catch (e) {
+      final status = _failureStatus(e);
+      return PasswordHistoryResult.failure(
+        status == 0 ? _msgNetwork : _messageFrom(e, 'ไม่สามารถดึงประวัติการเปลี่ยนรหัสผ่านได้'),
+        status: status,
+      );
+    }
+  }
+
+  Future<NotificationCountsResult> notificationCounts({
+    DateTime? reportsSince,
+    DateTime? publicSince,
+  }) async {
+    final token = await _accessToken();
+    if (token == null) {
+      return NotificationCountsResult.failure(_msgNoSession, status: 401);
+    }
+
+    try {
+      final res = await _http.post(
+        '/api/profile/notifications',
+        data: {
+          'token': token,
+          if (reportsSince != null)
+            'reports_since': reportsSince.toUtc().toIso8601String(),
+          if (publicSince != null)
+            'public_since': publicSince.toUtc().toIso8601String(),
+        },
+      );
+
+      final data = res.data;
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        if (SessionGuard.isBanned(map)) {
+          await SessionGuard.handleBanned();
+          return NotificationCountsResult.failure('บัญชีของคุณถูกระงับ', status: 403);
+        }
+        return NotificationCountsResult.fromJson(map);
+      }
+      return NotificationCountsResult.failure(_msgNetwork);
+    } catch (e) {
+      final status = _failureStatus(e);
+      return NotificationCountsResult.failure(
+        status == 0 ? _msgNetwork : _messageFrom(e, 'ไม่สามารถดึงจำนวนแจ้งเตือนใหม่ได้'),
+        status: status,
+      );
+    }
+  }
+
   static String? resolveAvatarUrl(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;

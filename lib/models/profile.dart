@@ -216,3 +216,105 @@ class DownloadHistoryResult {
   factory DownloadHistoryResult.failure(String message, {int status = 0}) =>
       DownloadHistoryResult(success: false, message: message, status: status);
 }
+
+
+class PasswordHistoryEntry {
+  final String id;
+  final String? ip;
+  final String? userAgent;
+  final DateTime? createdAt;
+
+  PasswordHistoryEntry({
+    required this.id,
+    this.ip,
+    this.userAgent,
+    this.createdAt,
+  });
+
+  factory PasswordHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return PasswordHistoryEntry(
+      id: _asString(json['id']) ?? '',
+      ip: _asString(json['ip']),
+      userAgent: _asString(json['user_agent']),
+      createdAt: _asDate(json['created_at']),
+    );
+  }
+}
+
+class PasswordHistoryResult {
+  final bool success;
+  final List<PasswordHistoryEntry> entries;
+  final String message;
+  final int status;
+
+  PasswordHistoryResult({
+    required this.success,
+    this.entries = const [],
+    this.message = '',
+    this.status = 0,
+  });
+
+  factory PasswordHistoryResult.fromJson(Map<String, dynamic> json) {
+    final items = <PasswordHistoryEntry>[];
+    final rawList = json['data'];
+    if (rawList is List) {
+      for (final entry in rawList) {
+        if (entry is Map) {
+          items.add(
+            PasswordHistoryEntry.fromJson(Map<String, dynamic>.from(entry)),
+          );
+        }
+      }
+    }
+
+    return PasswordHistoryResult(
+      success: json['success'] == true,
+      entries: items,
+      message: _asString(json['message']) ?? '',
+      status: json['status'] is int ? json['status'] as int : 0,
+    );
+  }
+
+  factory PasswordHistoryResult.failure(String message, {int status = 0}) =>
+      PasswordHistoryResult(success: false, message: message, status: status);
+}
+
+
+class NotificationCountsResult {
+  final bool success;
+  final int reports;
+  final int publicCount;
+  final String message;
+  final int status;
+
+  NotificationCountsResult({
+    required this.success,
+    this.reports = 0,
+    this.publicCount = 0,
+    this.message = '',
+    this.status = 0,
+  });
+
+  factory NotificationCountsResult.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    int readCount(dynamic value) {
+      if (value is int) return value;
+      return int.tryParse(value?.toString() ?? '') ?? 0;
+    }
+
+    return NotificationCountsResult(
+      success: json['success'] == true,
+      reports: data is Map ? readCount(data['reports']) : 0,
+      publicCount: data is Map ? readCount(data['public']) : 0,
+      message: _asString(json['message']) ?? '',
+      status: json['status'] is int ? json['status'] as int : 0,
+    );
+  }
+
+  factory NotificationCountsResult.failure(String message, {int status = 0}) =>
+      NotificationCountsResult(
+        success: false,
+        message: message,
+        status: status,
+      );
+}

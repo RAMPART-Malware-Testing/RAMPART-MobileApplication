@@ -42,6 +42,7 @@ class DownloadOutcome {
     this.fileName,
     this.sizeBytes,
     required this.message,
+    this.cancelled = false,
   });
 
   final bool success;
@@ -49,6 +50,7 @@ class DownloadOutcome {
   final String? fileName;
   final int? sizeBytes;
   final String message;
+  final bool cancelled;
 }
 
 class ReportDownloadService {
@@ -74,6 +76,7 @@ class ReportDownloadService {
     required String md5,
     String? fileName,
     void Function(DownloadProgress progress)? onProgress,
+    CancelToken? cancelToken,
   }) async {
     try {
       final url = await AnalysisService().buildDownloadUrl(
@@ -86,6 +89,7 @@ class ReportDownloadService {
       final response = await _http.get<List<int>>(
         url,
         options: Options(responseType: ResponseType.bytes),
+        cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           onProgress?.call(DownloadProgress(received: received, total: total));
         },
@@ -139,6 +143,14 @@ class ReportDownloadService {
         message: 'ดาวน์โหลดสำเร็จ',
       );
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) {
+        return DownloadOutcome(
+          success: false,
+          fileName: fileName,
+          cancelled: true,
+          message: 'ยกเลิกการดาวน์โหลดแล้ว',
+        );
+      }
       final status = e.response?.statusCode ?? 0;
       if (status >= 400 && status < 500) {
         return DownloadOutcome(

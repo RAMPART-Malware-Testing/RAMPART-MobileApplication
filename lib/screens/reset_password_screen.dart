@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../components/recaptcha_sheet.dart';
 import '../services/authService.dart';
 import '../services/profile_service.dart';
-import '../services/recaptcha_service.dart';
 import '../theme/app_theme.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key, this.submit = defaultSubmit});
 
-  final Future<Map<String, dynamic>> Function(String newPassword) submit;
+  final Future<Map<String, dynamic>> Function(
+      String currentPassword, String newPassword) submit;
 
-  static Future<Map<String, dynamic>> defaultSubmit(String newPassword) =>
-      authService.changePassword(newPassword);
+  static Future<Map<String, dynamic>> defaultSubmit(
+          String currentPassword, String newPassword) =>
+      authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -21,17 +24,19 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _currentController = TextEditingController();
   final _newController = TextEditingController();
   final _confirmController = TextEditingController();
 
+  bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _saving = false;
-  bool _isRecaptchaVerified = false;
   String? _serverError;
 
   @override
   void dispose() {
+    _currentController.dispose();
     _newController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -50,30 +55,14 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       _hasDigit(value) &&
       _hasSymbol(value);
 
-  Future<void> _openRecaptcha() async {
-    final token = await RecaptchaSheet.show(context);
-    if (!mounted || token == null || token.isEmpty) return;
-
-    final ok = await RecaptchaVerifyService.instance.verifyToken(token);
-    if (!mounted) return;
-    setState(() {
-      _isRecaptchaVerified = ok;
-      if (!ok) _serverError = 'ยืนยัน reCAPTCHA ไม่สำเร็จ กรุณาลองใหม่';
-    });
-  }
-
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     setState(() => _serverError = null);
     if (!_formKey.currentState!.validate()) return;
 
-    if (!_isRecaptchaVerified) {
-      setState(() => _serverError = 'กรุณายืนยันตัวตนด้วย reCAPTCHA ก่อน');
-      return;
-    }
-
     setState(() => _saving = true);
-    final result = await widget.submit(_newController.text);
+    final result =
+        await widget.submit(_currentController.text, _newController.text);
     if (!mounted) return;
     setState(() => _saving = false);
 
@@ -135,6 +124,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   const SizedBox(height: 24),
                   _buildAccountCard(customColors),
                   const SizedBox(height: 24),
+                  _buildCurrentPasswordField(customColors),
+                  const SizedBox(height: 18),
                   _buildNewPasswordField(customColors),
                   const SizedBox(height: 10),
                   _buildRules(customColors),
@@ -144,8 +135,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     const SizedBox(height: 16),
                     _buildServerError(),
                   ],
-                  const SizedBox(height: 20),
-                  _buildRecaptcha(customColors),
                   const SizedBox(height: 20),
                   _buildSaveButton(customColors),
                   const SizedBox(height: 16),
@@ -219,7 +208,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'ยืนยันด้วยเซสชันที่ล็อกอินอยู่ ไม่ต้องยืนยัน OTP ทางอีเมล',
+                  'ยืนยันด้วยรหัสผ่านปัจจุบันของบัญชี ไม่ต้องยืนยัน OTP ทางอีเมล',
                   style: TextStyle(
                     fontFamily: 'Kanit',
                     fontSize: 11.5,
@@ -231,6 +220,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCurrentPasswordField(CustomColors customColors) {
+    return _buildField(
+      customColors,
+      label: 'รหัสผ่านปัจจุบัน',
+      controller: _currentController,
+      obscure: _obscureCurrent,
+      onToggleObscure: () => setState(() => _obscureCurrent = !_obscureCurrent),
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'กรุณากรอกรหัสผ่านปัจจุบัน';
+        return null;
+      },
     );
   }
 
@@ -403,50 +406,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRecaptcha(CustomColors customColors) {
-    return GestureDetector(
-      onTap: _openRecaptcha,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _isRecaptchaVerified
-              ? Colors.green.withValues(alpha: 0.1)
-              : Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _isRecaptchaVerified
-                ? Colors.green
-                : customColors.cyanColor.withValues(alpha: 0.5),
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              _isRecaptchaVerified
-                  ? Icons.check_box
-                  : Icons.check_box_outline_blank,
-              color: _isRecaptchaVerified ? Colors.green : customColors.hintColor,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                _isRecaptchaVerified ? 'ยืนยันตัวตนสำเร็จ' : 'ฉันไม่ใช่บอท',
-                style: TextStyle(
-                  fontFamily: 'Kanit',
-                  color: _isRecaptchaVerified ? Colors.green : Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            Icon(Icons.security, color: customColors.cyanColor, size: 20),
-          ],
-        ),
       ),
     );
   }
